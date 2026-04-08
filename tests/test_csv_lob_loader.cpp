@@ -1,11 +1,11 @@
 #include "bt/csv_lob_loader.hpp"
 #include "bt/types.hpp"
+#include "lob_fixture.hpp"
 
 #include <gtest/gtest.h>
 
 #include <filesystem>
 #include <fstream>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -15,37 +15,8 @@ namespace {
 
 constexpr bt::InstrumentSpec kSpec{1e-7, 1.0};
 
-// Build a single LOB header line with 25 levels in the user's column order.
-std::string make_header() {
-    std::ostringstream s;
-    s << ",local_timestamp";
-    for (std::size_t i = 0; i < bt::kMaxLevels; ++i) {
-        s << ",asks[" << i << "].price"
-          << ",asks[" << i << "].amount"
-          << ",bids[" << i << "].price"
-          << ",bids[" << i << "].amount";
-    }
-    s << '\n';
-    return s.str();
-}
-
-// Build a row with synthetic but on-grid prices: ask[i] = 110436+i, bid[i] = 110435-i,
-// amounts = (i+1)*100 (asks) and (i+1)*200 (bids), so each level has a unique signature.
-std::string make_row(int idx, std::int64_t ts) {
-    std::ostringstream s;
-    s << idx << ',' << ts;
-    s.precision(7);
-    s << std::fixed;
-    for (std::size_t i = 0; i < bt::kMaxLevels; ++i) {
-        const double ap = (110436 + static_cast<double>(i)) * 1e-7;
-        const double bp = (110435 - static_cast<double>(i)) * 1e-7;
-        const auto aa = static_cast<double>((i + 1) * 100);
-        const auto ba = static_cast<double>((i + 1) * 200);
-        s << ',' << ap << ',' << aa << ',' << bp << ',' << ba;
-    }
-    s << '\n';
-    return s.str();
-}
+using bt::testing::make_lob_header;
+using bt::testing::make_lob_row;
 
 class CsvLobLoaderTest : public ::testing::Test {
 protected:
@@ -70,7 +41,7 @@ protected:
 };
 
 TEST_F(CsvLobLoaderTest, ParsesAllLevelsAcrossMultipleRows) {
-    std::string content = make_header() + make_row(0, 1000) + make_row(1, 2000);
+    std::string content = make_lob_header() + make_lob_row(0, 1000) + make_lob_row(1, 2000);
     write(content);
 
     bt::CsvLobLoader loader(path_.string(), kSpec);
@@ -110,8 +81,8 @@ TEST_F(CsvLobLoaderTest, ParsesUserSampleRow) {
 
 TEST_F(CsvLobLoaderTest, RejectsOffGridPrice) {
     // Build a valid 25-level row, then mutate one ask price to be off-grid.
-    const std::string content = make_header();
-    std::string row = make_row(0, 1000);
+    const std::string content = make_lob_header();
+    std::string row = make_lob_row(0, 1000);
     // Replace the first ask price (0.0110436) with an off-grid value.
     const std::string bad   = "0.01104365";
     const std::string good  = "0.0110436";
@@ -142,9 +113,9 @@ void replace_first(std::string& s, std::string_view from, std::string_view to) {
 TEST_F(CsvLobLoaderTest, BadNumberErrorIncludesLevelAndColumn) {
     // asks[17].price = (110436 + 17) * 1e-7 = 0.0110453 — unique in the row
     // (asks span 110436..110460, bids span 110411..110435).
-    std::string row = make_row(0, 1000);
+    std::string row = make_lob_row(0, 1000);
     replace_first(row, "0.0110453", "abc");
-    write(make_header() + row);
+    write(make_lob_header() + row);
 
     bt::CsvLobLoader loader(path_.string(), kSpec);
     bt::BookSnapshot snap{};
@@ -161,9 +132,9 @@ TEST_F(CsvLobLoaderTest, BadNumberErrorIncludesLevelAndColumn) {
 
 TEST_F(CsvLobLoaderTest, OffGridErrorIncludesLevelAndColumn) {
     // bids[3].price = (110435 - 3) * 1e-7 = 0.0110432 — unique in the row.
-    std::string row = make_row(0, 1000);
+    std::string row = make_lob_row(0, 1000);
     replace_first(row, "0.0110432", "0.01104325");  // halfway between two ticks
-    write(make_header() + row);
+    write(make_lob_header() + row);
 
     bt::CsvLobLoader loader(path_.string(), kSpec);
     bt::BookSnapshot snap{};
@@ -183,9 +154,9 @@ TEST_F(CsvLobLoaderTest, MissingFieldErrorIncludesLevel) {
     // asks[9].price = (110436 + 9) * 1e-7 = 0.0110445 — unique in the row.
     // Replacing it with empty yields `...,,1000.000000,...` which the loader
     // sees as an empty field at level 9.
-    std::string row = make_row(0, 1000);
+    std::string row = make_lob_row(0, 1000);
     replace_first(row, "0.0110445", "");
-    write(make_header() + row);
+    write(make_lob_header() + row);
 
     bt::CsvLobLoader loader(path_.string(), kSpec);
     bt::BookSnapshot snap{};

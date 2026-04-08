@@ -14,7 +14,9 @@ add_executable(bt_tests
     test_types.cpp
     test_csv_trade_loader.cpp
     test_csv_lob_loader.cpp
+    test_event_stream.cpp
 )
+target_include_directories(bt_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bt_tests PRIVATE bt_core GTest::gtest_main)
 
 gtest_discover_tests(bt_tests)

@@ -1,6 +1,7 @@
 add_library(bt_core STATIC
     data/csv_trade_loader.cpp
     data/csv_lob_loader.cpp
+    data/event_stream.cpp
 )
 target_include_directories(bt_core
     PUBLIC  ${CMAKE_SOURCE_DIR}/include
