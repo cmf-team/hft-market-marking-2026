@@ -12,6 +12,8 @@ include(GoogleTest)
 
 add_executable(bt_tests
     test_types.cpp
+    test_csv_trade_loader.cpp
+    test_csv_lob_loader.cpp
 )
 target_link_libraries(bt_tests PRIVATE bt_core GTest::gtest_main)
 
