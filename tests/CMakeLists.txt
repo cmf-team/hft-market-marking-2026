@@ -16,8 +16,14 @@ add_executable(bt_tests
     test_csv_lob_loader.cpp
     test_event_stream.cpp
     test_order_book.cpp
+    test_matcher.cpp
 )
-target_include_directories(bt_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# tests/ for shared fixtures, src/ so tests can reach internal headers like
+# exec/matcher.hpp that are deliberately not exposed via include/bt/.
+target_include_directories(bt_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/src
+)
 target_link_libraries(bt_tests PRIVATE bt_core GTest::gtest_main)
 
 gtest_discover_tests(bt_tests)
