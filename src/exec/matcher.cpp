@@ -45,6 +45,9 @@ Matcher::SubmitResult Matcher::submit(Side side, Price price, Qty qty,
     o.filled       = 0;
     o.submitted_ts = now;
     o.tif          = TimeInForce::PostOnly;
+    // Initial queue position from the model. Joining inside the spread or
+    // at a price not currently in the book yields 0.
+    o.queue_ahead  = queue_model_->initial_queue(side, price, book);
 
     if (side == Side::Buy) {
         bids_[price].push_back(o);
@@ -83,21 +86,34 @@ std::vector<Fill> Matcher::on_trade(const Trade& trade, Timestamp now) {
     std::vector<Fill> fills;
     Qty remaining = trade.amount;
 
-    // Walk one price level: drain orders FIFO until either the level is
-    // empty or the trade volume is exhausted. Fully filled orders are
-    // popped and removed from the id index.
+    // Walk one price level: thread the remaining trade volume through orders
+    // in FIFO order. For each order, the queue model erodes its `queue_ahead`
+    // first, then the matcher fills any leftover against the order. Fully
+    // filled orders are popped; partially filled orders stay; orders whose
+    // queue is still non-zero stay (next trade may continue eroding them).
     auto drain_level = [&](std::deque<Order>& level) {
-        while (!level.empty() && remaining > 0) {
-            Order& o = level.front();
-            const Qty want = o.qty - o.filled;
-            const Qty take = std::min(want, remaining);
-            o.filled  += take;
-            remaining -= take;
-            fills.push_back(Fill{ o.id, now, o.price, take });
-            if (o.filled == o.qty) {
-                id_index_.erase(o.id);
-                level.pop_front();
+        for (auto it = level.begin(); it != level.end() && remaining > 0;) {
+            Order& o = *it;
+
+            // Step 1: queue erosion. The model returns the leftover trade
+            // volume after consuming queue_ahead.
+            remaining = queue_model_->on_trade(o, remaining);
+
+            // Step 2: fill, only if the queue cleared and there's still
+            // trade volume to allocate.
+            if (o.queue_ahead == 0 && remaining > 0) {
+                const Qty want = o.qty - o.filled;
+                const Qty take = std::min(want, remaining);
+                o.filled  += take;
+                remaining -= take;
+                fills.push_back(Fill{ o.id, now, o.price, take });
+                if (o.filled == o.qty) {
+                    id_index_.erase(o.id);
+                    it = level.erase(it);
+                    continue;
+                }
             }
+            ++it;
         }
     };
 
@@ -129,11 +145,45 @@ std::vector<Fill> Matcher::on_trade(const Trade& trade, Timestamp now) {
     return fills;
 }
 
-std::vector<Fill> Matcher::on_snapshot(const OrderBook& /*prev*/,
-                                       const OrderBook& /*curr*/,
-                                       Timestamp /*now*/) {
+std::vector<Fill> Matcher::on_snapshot(const OrderBook& prev,
+                                       const OrderBook& curr,
+                                       Timestamp now) {
+    std::vector<Fill> fills;
 
-    return {};
+    // Walk both sides. The queue model decides per-order whether the prev→curr
+    // transition implies a fill (Case A — level disappeared) and updates
+    // queue_ahead in place for cases B–D. Fully filled orders are removed.
+    auto walk = [&](auto& book) {
+        for (auto lvl_it = book.begin(); lvl_it != book.end();) {
+            auto& level = lvl_it->second;
+            for (auto it = level.begin(); it != level.end();) {
+                Order& o = *it;
+                const Qty fill_qty = queue_model_->on_snapshot(o, prev, curr);
+                if (fill_qty > 0) {
+                    // The model already capped against (qty - filled), but
+                    // re-cap defensively.
+                    const Qty take = std::min(fill_qty, o.qty - o.filled);
+                    o.filled += take;
+                    fills.push_back(Fill{ o.id, now, o.price, take });
+                    if (o.filled == o.qty) {
+                        id_index_.erase(o.id);
+                        it = level.erase(it);
+                        continue;
+                    }
+                }
+                ++it;
+            }
+            if (level.empty()) {
+                lvl_it = book.erase(lvl_it);
+            } else {
+                ++lvl_it;
+            }
+        }
+    };
+    walk(bids_);
+    walk(asks_);
+
+    return fills;
 }
 
 bool Matcher::has_order(OrderId id) const noexcept {

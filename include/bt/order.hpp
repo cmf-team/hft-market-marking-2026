@@ -14,6 +14,11 @@ struct Order {
     Qty         filled{};         // running total of filled units
     Timestamp   submitted_ts{};   // when the matcher accepted it (post-latency)
     TimeInForce tif = TimeInForce::PostOnly;
+    // Estimated volume sitting in front of this order at its price level.
+    // Set on submit by the queue model and eroded by `on_trade` as public
+    // trades chew through the queue. The order is only eligible for fills
+    // once `queue_ahead` reaches 0.
+    Qty         queue_ahead{};
 };
 
 // Notification of an executed quantity against an order. Emitted by the

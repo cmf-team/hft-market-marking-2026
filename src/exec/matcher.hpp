@@ -2,6 +2,7 @@
 
 #include "bt/events.hpp"
 #include "bt/order.hpp"
+#include "bt/queue_model.hpp"
 #include "bt/types.hpp"
 
 #include <cstddef>
@@ -31,7 +32,11 @@ public:
         OrderReject reject{};     // valid iff !accepted
     };
 
-    explicit Matcher(OrderId starting_id = 1) noexcept : next_id_(starting_id) {}
+    // The queue model is injected by reference — it is stateless and one
+    // instance can be shared across the whole engine. The matcher does not
+    // own its lifetime; the caller (the engine) keeps it alive.
+    explicit Matcher(const IQueueModel& queue_model, OrderId starting_id = 1) noexcept
+        : queue_model_(&queue_model), next_id_(starting_id) {}
 
     // Submit a post-only limit order. The post-only check uses the book at
     // *delivery* time (whatever the caller passes as `now` and `book`). In
@@ -68,6 +73,7 @@ private:
     using BuyBook  = std::map<Price, std::deque<Order>, std::greater<>>;
     using SellBook = std::map<Price, std::deque<Order>>;
 
+    const IQueueModel* queue_model_;
     OrderId  next_id_;
     BuyBook  bids_;
     SellBook asks_;

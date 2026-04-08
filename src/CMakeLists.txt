@@ -4,6 +4,7 @@ add_library(bt_core STATIC
     data/event_stream.cpp
     book/order_book.cpp
     exec/matcher.cpp
+    exec/queue_model.cpp
 )
 target_include_directories(bt_core
     PUBLIC  ${CMAKE_SOURCE_DIR}/include
