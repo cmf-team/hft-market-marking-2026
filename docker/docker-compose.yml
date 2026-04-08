@@ -1,0 +1,48 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_UID: "${UID:-1000}"
+        USER_GID: "${GID:-1000}"
+    image: backtester-dev:latest
+    container_name: backtester-dev
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+      - build-cache:/workspace/build
+    # Keep the container alive so CLion's Docker toolchain (or `make shell`)
+    # can attach via `docker exec`.
+    command: ["sleep", "infinity"]
+    ports:
+      - "2345:2345"  # gdbserver
+
+  build:
+    image: backtester-dev:latest
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+      - build-cache:/workspace/build
+    command: >
+      bash -c "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+               && cmake --build build"
+
+  test:
+    image: backtester-dev:latest
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+      - build-cache:/workspace/build
+    command: ["ctest", "--test-dir", "build", "--output-on-failure"]
+
+  run:
+    image: backtester-dev:latest
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+      - build-cache:/workspace/build
+    entrypoint: ["./build/backtester"]
+
+volumes:
+  build-cache:
