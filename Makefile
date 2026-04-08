@@ -20,7 +20,7 @@ test: build
 	$(COMPOSE) exec -T dev ctest --test-dir build --output-on-failure
 
 run: build
-	$(COMPOSE) exec -T dev ./build/backtester $(ARGS)
+	$(COMPOSE) exec -T dev ./build/src/backtester $(ARGS)
 
 shell: up
 	$(COMPOSE) exec dev bash
