@@ -1,0 +1,13 @@
+PLAN.md
+
+# Build output
+build/
+cmake-build-*/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store
