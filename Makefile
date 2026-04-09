@@ -2,7 +2,7 @@ COMPOSE := docker compose -f docker/docker-compose.yml
 export UID := $(shell id -u)
 export GID := $(shell id -g)
 
-.PHONY: image up down build test run shell clean
+.PHONY: image up down build test run run-with-config shell clean
 
 image:
 	$(COMPOSE) build
@@ -21,6 +21,9 @@ test: build
 
 run: build
 	$(COMPOSE) exec -T dev ./build/src/backtester $(ARGS)
+
+run-with-config: build
+	$(COMPOSE) exec -T dev ./build/src/backtester --config data/config.txt $(ARGS)
 
 shell: up
 	$(COMPOSE) exec dev bash

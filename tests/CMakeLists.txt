@@ -22,6 +22,7 @@ add_executable(bt_tests
     test_portfolio.cpp
     test_engine.cpp
     test_stats.cpp
+    test_static_quoter.cpp
 )
 # tests/ for shared fixtures, src/ so tests can reach internal headers like
 # exec/matcher.hpp that are deliberately not exposed via include/bt/.

@@ -9,6 +9,7 @@ add_library(bt_core STATIC
     portfolio/portfolio.cpp
     engine/backtest_engine.cpp
     stats/stats.cpp
+    strategies/static_quoter.cpp
 )
 target_include_directories(bt_core
     PUBLIC  ${CMAKE_SOURCE_DIR}/include
@@ -17,4 +18,7 @@ target_include_directories(bt_core
 target_compile_features(bt_core PUBLIC cxx_std_20)
 
 add_executable(backtester main.cpp)
+# main.cpp is the engine driver, not a strategy — it legitimately needs the
+# private engine header (which in turn pulls exec/latency.hpp and exec/matcher.hpp).
+target_include_directories(backtester PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(backtester PRIVATE bt_core)
