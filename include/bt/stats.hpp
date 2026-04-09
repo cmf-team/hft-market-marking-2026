@@ -22,6 +22,13 @@ class Stats {
 public:
     Stats() = default;
 
+    // Set the equity-curve sample interval in microseconds. The drawdown
+    // peak/trough are still updated on every on_mark call (so a fast spike
+    // between samples is captured), but the equity_ vector only grows once
+    // per interval — at default 1s a multi-hour run produces a few thousand
+    // points, not millions. Pass 0 to record every mark.
+    void set_sample_interval(Timestamp interval_us) noexcept { sample_interval_us_ = interval_us; }
+
     // ----- Inputs (called by the engine) --------------------------------------
 
     // Strategy attempted to post a new order. Counted at the IExchange call
@@ -88,6 +95,22 @@ private:
     std::int64_t             peak_equity_  = 0;
     std::int64_t             max_drawdown_ = 0;
     bool                     have_peak_    = false;
+
+    // Sampling: drawdown is updated on every mark, but the equity_ vector
+    // only stores points spaced by sample_interval_us_ (or every mark when
+    // set to 0). first/last_mark_ts_ track the full backtest time span for
+    // the report header.
+    Timestamp                sample_interval_us_ = 1'000'000;  // default: 1 second
+    Timestamp                last_sample_ts_     = 0;
+    bool                     have_sample_        = false;
+    Timestamp                first_mark_ts_      = 0;
+    Timestamp                last_mark_ts_       = 0;
+    bool                     have_mark_          = false;
+
+public:
+    [[nodiscard]] Timestamp first_mark_ts() const noexcept { return first_mark_ts_; }
+    [[nodiscard]] Timestamp last_mark_ts()  const noexcept { return last_mark_ts_; }
+    [[nodiscard]] bool      has_marks()     const noexcept { return have_mark_; }
 };
 
 }  // namespace bt

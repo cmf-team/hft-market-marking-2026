@@ -55,6 +55,7 @@ struct Config {
     bt::Timestamp    submit_us      = 0;
     bt::Timestamp    cancel_us      = 0;
     bt::Timestamp    fill_us        = 0;
+    bt::Timestamp    sample_us      = 1'000'000;  // equity-curve sample interval; 1s default
     bt::Qty          quote_size     = 1;
 };
 
@@ -64,7 +65,7 @@ void print_usage() {
         "                  [--config <config_path>]\n"
         "                  [--tick-size <double>] [--qty-scale <double>]\n"
         "                  [--submit-us <int>] [--cancel-us <int>] [--fill-us <int>]\n"
-        "                  [--quote-size <int>]\n";
+        "                  [--sample-us <int>] [--quote-size <int>]\n";
 }
 
 [[nodiscard]] std::string trim(std::string_view sv) {
@@ -83,6 +84,7 @@ void apply_kv(Config& cfg, const std::string& key, const std::string& val) {
     else if (key == "submit_us")  cfg.submit_us   = std::stoll(val);
     else if (key == "cancel_us")  cfg.cancel_us   = std::stoll(val);
     else if (key == "fill_us")    cfg.fill_us     = std::stoll(val);
+    else if (key == "sample_us")  cfg.sample_us   = std::stoll(val);
     else if (key == "quote_size") cfg.quote_size  = std::stoll(val);
     else throw std::runtime_error("unknown config key: " + key);
 }
@@ -138,6 +140,7 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--submit-us")  cfg.submit_us   = std::stoll(need_value(i, a.c_str()));
         else if (a == "--cancel-us")  cfg.cancel_us   = std::stoll(need_value(i, a.c_str()));
         else if (a == "--fill-us")    cfg.fill_us     = std::stoll(need_value(i, a.c_str()));
+        else if (a == "--sample-us")  cfg.sample_us   = std::stoll(need_value(i, a.c_str()));
         else if (a == "--quote-size") cfg.quote_size  = std::stoll(need_value(i, a.c_str()));
         else if (a == "-h" || a == "--help") { print_usage(); std::exit(0); }
         else throw std::runtime_error("unknown argument: " + a);
@@ -171,6 +174,7 @@ int main(int argc, char** argv) {
         bt::StaticQuoter          strat(cfg.quote_size);
 
         bt::BacktestEngine engine(stream, qm, lm, strat);
+        engine.set_sample_interval(cfg.sample_us);
 
         std::cout << "Running backtest:\n"
                   << "  lob        = " << cfg.lob_path    << '\n'
@@ -179,6 +183,7 @@ int main(int argc, char** argv) {
                   << "  tick_size  = " << cfg.tick_size   << '\n'
                   << "  latencies  = submit/cancel/fill us = "
                   << cfg.submit_us << '/' << cfg.cancel_us << '/' << cfg.fill_us << '\n'
+                  << "  sample_us  = " << cfg.sample_us   << '\n'
                   << "  quote_size = " << cfg.quote_size  << '\n';
 
         const auto t0 = std::chrono::steady_clock::now();

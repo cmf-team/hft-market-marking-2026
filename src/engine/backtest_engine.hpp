@@ -62,6 +62,11 @@ public:
     [[nodiscard]] const Matcher&   matcher()   const noexcept { return matcher_; }
     [[nodiscard]] const Stats&     stats()     const noexcept { return stats_; }
 
+    // Equity-curve sample interval forwarded to Stats. See Stats::set_sample_interval.
+    void set_sample_interval(Timestamp interval_us) noexcept {
+        stats_.set_sample_interval(interval_us);
+    }
+
     // ----- IExchange -----
     void post_only_limit(Timestamp now, Side side, Price price, Qty qty) override;
     void cancel(Timestamp now, OrderId id) override;
