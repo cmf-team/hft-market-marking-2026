@@ -11,18 +11,44 @@ BacktestEngine::BacktestEngine(MergedEventStream&  stream,
                                IStrategy&          strategy) noexcept
     : stream_(&stream),
       matcher_(queue_model),
-      latency_(latency_model, matcher_, strategy),
+      latency_(latency_model, matcher_, *this),
       strategy_(&strategy) {
     strategy_->set_exchange(this);
 }
 
 void BacktestEngine::deliver_fills_(const std::vector<Fill>& fills, Timestamp now) {
     for (const auto& f : fills) {
-        // PnL updates immediately at the matcher-side fill time.
+        // PnL updates immediately at the matcher-side fill time. Stats also
+        // count the fill at the *true* fill time, not the latency-delayed
+        // delivery time, so volume/PnL accumulators don't lag the equity curve.
         portfolio_.on_fill(f);
+        stats_.on_fill(f);
         // The strategy hears about it after fill_delay.
         latency_.enqueue_fill(f, now);
     }
+}
+
+void BacktestEngine::on_submitted(OrderId id) {
+    strategy_->on_submitted(id);
+}
+
+void BacktestEngine::on_fill(const Fill& fill) {
+    // Stats and Portfolio were already updated at deliver_fills_; this is
+    // purely the latency-delayed forward to the strategy.
+    strategy_->on_fill(fill);
+}
+
+void BacktestEngine::on_reject(const OrderReject& reject) {
+    stats_.on_reject();
+    strategy_->on_reject(reject);
+}
+
+void BacktestEngine::on_cancel_ack(OrderId id) {
+    strategy_->on_cancel_ack(id);
+}
+
+void BacktestEngine::on_cancel_reject(const CancelReject& reject) {
+    strategy_->on_cancel_reject(reject);
 }
 
 std::int64_t BacktestEngine::run() {
@@ -46,6 +72,7 @@ std::int64_t BacktestEngine::run() {
                 auto fills = matcher_.on_snapshot(prev_book_, book_, now);
                 deliver_fills_(fills, now);
                 portfolio_.mark_to_market(book_.mid());
+                stats_.on_mark(now, portfolio_.total_pnl_ticks());
                 strategy_->on_book(book_, now);
             } else {
                 static_assert(std::is_same_v<T, Trade>);
@@ -65,6 +92,7 @@ std::int64_t BacktestEngine::run() {
 }
 
 void BacktestEngine::post_only_limit(Timestamp now, Side side, Price price, Qty qty) {
+    stats_.on_submit_attempt();
     latency_.submit(side, price, qty, now);
 }
 
