@@ -40,10 +40,9 @@ TEST(Matcher, SubmitAcceptsPassiveBuyBelowAsk) {
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
 
-    auto r = m.submit(bt::Side::Buy, /*price=*/100, /*qty=*/5, book, /*now=*/10);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, /*price=*/100, /*qty=*/5, book, /*now=*/10);
     ASSERT_TRUE(r.accepted);
-    EXPECT_EQ(r.id, 1u);
-    EXPECT_TRUE(m.has_order(r.id));
+    EXPECT_TRUE(m.has_order(1));
     EXPECT_EQ(m.resting_count(), 1u);
 }
 
@@ -52,9 +51,9 @@ TEST(Matcher, SubmitAcceptsPassiveSellAboveBid) {
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
 
-    auto r = m.submit(bt::Side::Sell, /*price=*/101, /*qty=*/5, book, /*now=*/10);
+    auto r = m.submit(/*id=*/1, bt::Side::Sell, /*price=*/101, /*qty=*/5, book, /*now=*/10);
     ASSERT_TRUE(r.accepted);
-    EXPECT_TRUE(m.has_order(r.id));
+    EXPECT_TRUE(m.has_order(1));
 }
 
 TEST(Matcher, SubmitAcceptsOnEmptyBook) {
@@ -63,7 +62,7 @@ TEST(Matcher, SubmitAcceptsOnEmptyBook) {
     const bt::OrderBook empty;
     ASSERT_TRUE(empty.empty());
 
-    auto r = m.submit(bt::Side::Buy, /*price=*/12345, /*qty=*/1, empty, /*now=*/0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, /*price=*/12345, /*qty=*/1, empty, /*now=*/0);
     EXPECT_TRUE(r.accepted);
 }
 
@@ -72,10 +71,10 @@ TEST(Matcher, PostOnlyRejectsBuyAtBestAsk) {
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
 
-    auto r = m.submit(bt::Side::Buy, /*price=*/101, /*qty=*/5, book, /*now=*/42);
+    auto r = m.submit(/*id=*/7, bt::Side::Buy, /*price=*/101, /*qty=*/5, book, /*now=*/42);
     ASSERT_FALSE(r.accepted);
     EXPECT_EQ(r.reject.reason, bt::RejectReason::WouldCross);
-    EXPECT_EQ(r.reject.id, 0u);  // never assigned
+    EXPECT_EQ(r.reject.id, 7u);  // matcher echoes the caller-supplied id
     EXPECT_EQ(r.reject.ts, 42);
     EXPECT_EQ(m.resting_count(), 0u);
 }
@@ -85,7 +84,7 @@ TEST(Matcher, PostOnlyRejectsBuyAboveBestAsk) {
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
 
-    auto r = m.submit(bt::Side::Buy, /*price=*/200, /*qty=*/5, book, /*now=*/0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, /*price=*/200, /*qty=*/5, book, /*now=*/0);
     EXPECT_FALSE(r.accepted);
     EXPECT_EQ(r.reject.reason, bt::RejectReason::WouldCross);
 }
@@ -95,24 +94,9 @@ TEST(Matcher, PostOnlyRejectsSellAtBestBid) {
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
 
-    auto r = m.submit(bt::Side::Sell, /*price=*/100, /*qty=*/5, book, /*now=*/0);
+    auto r = m.submit(/*id=*/1, bt::Side::Sell, /*price=*/100, /*qty=*/5, book, /*now=*/0);
     EXPECT_FALSE(r.accepted);
     EXPECT_EQ(r.reject.reason, bt::RejectReason::WouldCross);
-}
-
-TEST(Matcher, SubmitAssignsIncrementingIds) {
-    bt::PessimisticQueueModel qm;
-    bt::Matcher m(qm);
-    const auto book = book_with(100, 101);
-
-    auto a = m.submit(bt::Side::Buy, 99, 1, book, 0);
-    auto b = m.submit(bt::Side::Buy, 98, 1, book, 0);
-    auto c = m.submit(bt::Side::Sell, 102, 1, book, 0);
-
-    ASSERT_TRUE(a.accepted && b.accepted && c.accepted);
-    EXPECT_EQ(a.id, 1u);
-    EXPECT_EQ(b.id, 2u);
-    EXPECT_EQ(c.id, 3u);
 }
 
 // --------------------------------------------------------------------------
@@ -123,33 +107,48 @@ TEST(Matcher, CancelRemovesRestingOrder) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto r = m.submit(bt::Side::Buy, 99, 5, book, 0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, 99, 5, book, 0);
     ASSERT_TRUE(r.accepted);
 
-    m.cancel(r.id, /*now=*/1);
-    EXPECT_FALSE(m.has_order(r.id));
+    EXPECT_EQ(m.cancel(1, /*now=*/1), bt::Matcher::CancelResult::Cancelled);
+    EXPECT_FALSE(m.has_order(1));
     EXPECT_EQ(m.resting_count(), 0u);
 }
 
-TEST(Matcher, CancelUnknownIdIsNoOp) {
+TEST(Matcher, CancelUnknownIdReturnsUnknownOrder) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
-    // Should not crash, should not throw, should leave state empty.
-    m.cancel(/*id=*/999, /*now=*/0);
+    EXPECT_EQ(m.cancel(/*id=*/999, /*now=*/0),
+              bt::Matcher::CancelResult::UnknownOrder);
     EXPECT_EQ(m.resting_count(), 0u);
+}
+
+TEST(Matcher, CancelOfFilledOrderReturnsUnknownOrder) {
+    bt::PessimisticQueueModel qm;
+    bt::Matcher m(qm);
+    const auto book = book_with(100, 101);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, 99, 5, book, 0);
+    ASSERT_TRUE(r.accepted);
+
+    // Trade fully fills the order — id is no longer in the index.
+    auto fills = m.on_trade(bt::Trade{ 1, bt::Side::Sell, 99, 5 }, 1);
+    ASSERT_EQ(fills.size(), 1u);
+
+    // Matcher cannot tell "filled" from "never existed" — both are UnknownOrder.
+    EXPECT_EQ(m.cancel(1, /*now=*/2), bt::Matcher::CancelResult::UnknownOrder);
 }
 
 TEST(Matcher, CancelLeavesOtherOrdersAtSameLevelIntact) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto a = m.submit(bt::Side::Buy, 99, 5, book, 0);
-    auto b = m.submit(bt::Side::Buy, 99, 7, book, 0);
+    auto a = m.submit(/*id=*/1, bt::Side::Buy, 99, 5, book, 0);
+    auto b = m.submit(/*id=*/2, bt::Side::Buy, 99, 7, book, 0);
     ASSERT_TRUE(a.accepted && b.accepted);
 
-    m.cancel(a.id, 0);
-    EXPECT_FALSE(m.has_order(a.id));
-    EXPECT_TRUE(m.has_order(b.id));
+    EXPECT_EQ(m.cancel(1, 0), bt::Matcher::CancelResult::Cancelled);
+    EXPECT_FALSE(m.has_order(1));
+    EXPECT_TRUE(m.has_order(2));
     EXPECT_EQ(m.resting_count(), 1u);
 }
 
@@ -161,29 +160,29 @@ TEST(Matcher, SellTradeFillsRestingBuyAtCrossingPrice) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto r = m.submit(bt::Side::Buy, /*price=*/99, /*qty=*/5, book, /*now=*/0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, /*price=*/99, /*qty=*/5, book, /*now=*/0);
     ASSERT_TRUE(r.accepted);
 
     // A sell trade at 99 (or below) crosses our 99 bid.
     auto fills = m.on_trade(bt::Trade{ /*ts=*/10, bt::Side::Sell, /*price=*/99, /*amount=*/5 }, /*now=*/10);
     ASSERT_EQ(fills.size(), 1u);
-    EXPECT_EQ(fills[0].id, r.id);
+    EXPECT_EQ(fills[0].id, 1u);
     EXPECT_EQ(fills[0].price, 99);   // resting limit price, NOT the trade price
     EXPECT_EQ(fills[0].qty, 5);
     EXPECT_EQ(fills[0].ts, 10);
-    EXPECT_FALSE(m.has_order(r.id)); // fully filled, removed
+    EXPECT_FALSE(m.has_order(1));    // fully filled, removed
 }
 
 TEST(Matcher, BuyTradeFillsRestingSellAtCrossingPrice) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto r = m.submit(bt::Side::Sell, /*price=*/102, /*qty=*/3, book, /*now=*/0);
+    auto r = m.submit(/*id=*/1, bt::Side::Sell, /*price=*/102, /*qty=*/3, book, /*now=*/0);
     ASSERT_TRUE(r.accepted);
 
     auto fills = m.on_trade(bt::Trade{ 5, bt::Side::Buy, 102, 3 }, 5);
     ASSERT_EQ(fills.size(), 1u);
-    EXPECT_EQ(fills[0].id, r.id);
+    EXPECT_EQ(fills[0].id, 1u);
     EXPECT_EQ(fills[0].price, 102);
     EXPECT_EQ(fills[0].qty, 3);
 }
@@ -192,78 +191,78 @@ TEST(Matcher, SellTradeAboveBidDoesNotFill) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto r = m.submit(bt::Side::Buy, 99, 5, book, 0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, 99, 5, book, 0);
     ASSERT_TRUE(r.accepted);
 
     // Sell trade at 100 — above our bid of 99 — must NOT fill us.
     auto fills = m.on_trade(bt::Trade{ 1, bt::Side::Sell, 100, 5 }, 1);
     EXPECT_TRUE(fills.empty());
-    EXPECT_TRUE(m.has_order(r.id));
+    EXPECT_TRUE(m.has_order(1));
 }
 
 TEST(Matcher, BuyTradeBelowAskDoesNotFill) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto r = m.submit(bt::Side::Sell, 102, 5, book, 0);
+    auto r = m.submit(/*id=*/1, bt::Side::Sell, 102, 5, book, 0);
     ASSERT_TRUE(r.accepted);
 
     auto fills = m.on_trade(bt::Trade{ 1, bt::Side::Buy, 101, 5 }, 1);
     EXPECT_TRUE(fills.empty());
-    EXPECT_TRUE(m.has_order(r.id));
+    EXPECT_TRUE(m.has_order(1));
 }
 
 TEST(Matcher, OnTradePartialFillCappedByTradeAmount) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto r = m.submit(bt::Side::Buy, 99, /*qty=*/10, book, 0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, 99, /*qty=*/10, book, 0);
     ASSERT_TRUE(r.accepted);
 
     // Trade only 4 units — order should be partially filled.
     auto fills = m.on_trade(bt::Trade{ 1, bt::Side::Sell, 99, 4 }, 1);
     ASSERT_EQ(fills.size(), 1u);
     EXPECT_EQ(fills[0].qty, 4);
-    EXPECT_TRUE(m.has_order(r.id));  // still has 6 left
+    EXPECT_TRUE(m.has_order(1));  // still has 6 left
 
     // Second trade finishes it.
     auto fills2 = m.on_trade(bt::Trade{ 2, bt::Side::Sell, 99, 100 }, 2);
     ASSERT_EQ(fills2.size(), 1u);
     EXPECT_EQ(fills2[0].qty, 6);
-    EXPECT_FALSE(m.has_order(r.id));
+    EXPECT_FALSE(m.has_order(1));
 }
 
 TEST(Matcher, OnTradePartialFillCappedByOrderQty) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto r = m.submit(bt::Side::Buy, 99, /*qty=*/3, book, 0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, 99, /*qty=*/3, book, 0);
     ASSERT_TRUE(r.accepted);
 
     // Trade has 100 units, order only wants 3 — fill caps at 3.
     auto fills = m.on_trade(bt::Trade{ 1, bt::Side::Sell, 99, 100 }, 1);
     ASSERT_EQ(fills.size(), 1u);
     EXPECT_EQ(fills[0].qty, 3);
-    EXPECT_FALSE(m.has_order(r.id));
+    EXPECT_FALSE(m.has_order(1));
 }
 
 TEST(Matcher, OnTradeFifoWithinSameLevel) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto a = m.submit(bt::Side::Buy, 99, 5, book, /*now=*/1);
-    auto b = m.submit(bt::Side::Buy, 99, 5, book, /*now=*/2);
+    auto a = m.submit(/*id=*/1, bt::Side::Buy, 99, 5, book, /*now=*/1);
+    auto b = m.submit(/*id=*/2, bt::Side::Buy, 99, 5, book, /*now=*/2);
     ASSERT_TRUE(a.accepted && b.accepted);
 
     // Trade for 7 units: order `a` (oldest) gets all 5, order `b` gets 2.
     auto fills = m.on_trade(bt::Trade{ 3, bt::Side::Sell, 99, 7 }, 3);
     ASSERT_EQ(fills.size(), 2u);
-    EXPECT_EQ(fills[0].id, a.id);
+    EXPECT_EQ(fills[0].id, 1u);
     EXPECT_EQ(fills[0].qty, 5);
-    EXPECT_EQ(fills[1].id, b.id);
+    EXPECT_EQ(fills[1].id, 2u);
     EXPECT_EQ(fills[1].qty, 2);
-    EXPECT_FALSE(m.has_order(a.id));
-    EXPECT_TRUE(m.has_order(b.id));
+    EXPECT_FALSE(m.has_order(1));
+    EXPECT_TRUE(m.has_order(2));
 }
 
 TEST(Matcher, OnTradePricePriorityBestFirst) {
@@ -271,17 +270,17 @@ TEST(Matcher, OnTradePricePriorityBestFirst) {
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
     // Two bids at different prices: 99 (best) and 98.
-    auto worse  = m.submit(bt::Side::Buy, 98, 5, book, /*now=*/1);
-    auto better = m.submit(bt::Side::Buy, 99, 5, book, /*now=*/2);  // submitted later but better price
+    auto worse  = m.submit(/*id=*/1, bt::Side::Buy, 98, 5, book, /*now=*/1);
+    auto better = m.submit(/*id=*/2, bt::Side::Buy, 99, 5, book, /*now=*/2);  // submitted later but better price
     ASSERT_TRUE(worse.accepted && better.accepted);
 
     // Sell trade at 98 fills both (both bids cross 98). Best price first.
     auto fills = m.on_trade(bt::Trade{ 3, bt::Side::Sell, 98, 7 }, 3);
     ASSERT_EQ(fills.size(), 2u);
-    EXPECT_EQ(fills[0].id, better.id);
+    EXPECT_EQ(fills[0].id, 2u);
     EXPECT_EQ(fills[0].price, 99);   // filled at its OWN limit price
     EXPECT_EQ(fills[0].qty, 5);
-    EXPECT_EQ(fills[1].id, worse.id);
+    EXPECT_EQ(fills[1].id, 1u);
     EXPECT_EQ(fills[1].price, 98);
     EXPECT_EQ(fills[1].qty, 2);
 }
@@ -290,15 +289,15 @@ TEST(Matcher, OnTradeStopsAtFirstNonCrossingLevel) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto book = book_with(100, 101);
-    auto best  = m.submit(bt::Side::Buy, 99, 5, book, 0);
-    auto worse = m.submit(bt::Side::Buy, 97, 5, book, 0);
+    auto best  = m.submit(/*id=*/1, bt::Side::Buy, 99, 5, book, 0);
+    auto worse = m.submit(/*id=*/2, bt::Side::Buy, 97, 5, book, 0);
     ASSERT_TRUE(best.accepted && worse.accepted);
 
     // Sell trade at 98 crosses the 99 bid but NOT the 97 bid.
     auto fills = m.on_trade(bt::Trade{ 1, bt::Side::Sell, 98, 100 }, 1);
     ASSERT_EQ(fills.size(), 1u);
-    EXPECT_EQ(fills[0].id, best.id);
-    EXPECT_TRUE(m.has_order(worse.id));
+    EXPECT_EQ(fills[0].id, 1u);
+    EXPECT_TRUE(m.has_order(2));
 }
 
 TEST(Matcher, OnTradeWithNoRestingOrdersIsEmpty) {
@@ -345,7 +344,7 @@ TEST(Matcher, SubmitInheritsQueueAheadFromBookVolume) {
     const auto book = deep_book(/*bid_top=*/100, /*bid_qty=*/1000,
                                 /*ask_top=*/200, /*ask_qty=*/500);
 
-    auto r = m.submit(bt::Side::Buy, /*price=*/100, /*qty=*/5, book, 0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, /*price=*/100, /*qty=*/5, book, 0);
     ASSERT_TRUE(r.accepted);
 
     // A small sell trade @ 100 — only 100 lots, less than the 1000 in front
@@ -353,7 +352,7 @@ TEST(Matcher, SubmitInheritsQueueAheadFromBookVolume) {
     // of the queue model.
     auto fills = m.on_trade(bt::Trade{ 1, bt::Side::Sell, 100, 100 }, 1);
     EXPECT_TRUE(fills.empty());
-    EXPECT_TRUE(m.has_order(r.id));
+    EXPECT_TRUE(m.has_order(1));
 }
 
 TEST(Matcher, OrderFillsAfterEnoughTradeVolumeErodesQueue) {
@@ -361,20 +360,20 @@ TEST(Matcher, OrderFillsAfterEnoughTradeVolumeErodesQueue) {
     bt::Matcher m(qm);
     const auto book = deep_book(100, 100, 200, 500);
 
-    auto r = m.submit(bt::Side::Buy, 100, /*qty=*/5, book, 0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, 100, /*qty=*/5, book, 0);
     ASSERT_TRUE(r.accepted);
 
     // Trade chews 60 of the 100 lots in front of us.
     auto f1 = m.on_trade(bt::Trade{ 1, bt::Side::Sell, 100, 60 }, 1);
     EXPECT_TRUE(f1.empty());
-    EXPECT_TRUE(m.has_order(r.id));
+    EXPECT_TRUE(m.has_order(1));
 
     // Trade chews the remaining 40 + gives us 7 leftover. Fill caps at qty=5.
     auto f2 = m.on_trade(bt::Trade{ 2, bt::Side::Sell, 100, 47 }, 2);
     ASSERT_EQ(f2.size(), 1u);
-    EXPECT_EQ(f2[0].id, r.id);
+    EXPECT_EQ(f2[0].id, 1u);
     EXPECT_EQ(f2[0].qty, 5);
-    EXPECT_FALSE(m.has_order(r.id));
+    EXPECT_FALSE(m.has_order(1));
 }
 
 TEST(Matcher, QueueErosionThreadsThroughFifoOrdersAtSameLevel) {
@@ -385,8 +384,8 @@ TEST(Matcher, QueueErosionThreadsThroughFifoOrdersAtSameLevel) {
     // PessimisticQueueModel comments).
     const auto book = deep_book(100, 10, 200, 500);
 
-    auto a = m.submit(bt::Side::Buy, 100, /*qty=*/5, book, /*now=*/1);
-    auto b = m.submit(bt::Side::Buy, 100, /*qty=*/5, book, /*now=*/2);
+    auto a = m.submit(/*id=*/1, bt::Side::Buy, 100, /*qty=*/5, book, /*now=*/1);
+    auto b = m.submit(/*id=*/2, bt::Side::Buy, 100, /*qty=*/5, book, /*now=*/2);
     ASSERT_TRUE(a.accepted && b.accepted);
 
     // Trade of 25: A's queue (10) is consumed → 15 leftover → A fills 5
@@ -394,10 +393,10 @@ TEST(Matcher, QueueErosionThreadsThroughFifoOrdersAtSameLevel) {
     // → B does not fill from this trade.
     auto fills = m.on_trade(bt::Trade{ 3, bt::Side::Sell, 100, 25 }, 3);
     ASSERT_EQ(fills.size(), 1u);
-    EXPECT_EQ(fills[0].id, a.id);
+    EXPECT_EQ(fills[0].id, 1u);
     EXPECT_EQ(fills[0].qty, 5);
-    EXPECT_FALSE(m.has_order(a.id));
-    EXPECT_TRUE(m.has_order(b.id));  // B still queued
+    EXPECT_FALSE(m.has_order(1));
+    EXPECT_TRUE(m.has_order(2));  // B still queued
 }
 
 TEST(Matcher, OnSnapshotEmitsFillWhenLevelDisappears) {
@@ -406,7 +405,7 @@ TEST(Matcher, OnSnapshotEmitsFillWhenLevelDisappears) {
     const auto prev = deep_book(100, 500, 200, 500);
 
     // Submit when 100 is in the book — order has queue_ahead=500.
-    auto r = m.submit(bt::Side::Buy, 100, /*qty=*/5, prev, 0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, 100, /*qty=*/5, prev, 0);
     ASSERT_TRUE(r.accepted);
 
     // Build a snapshot where the 100 level disappeared (best bid is 99
@@ -415,25 +414,25 @@ TEST(Matcher, OnSnapshotEmitsFillWhenLevelDisappears) {
     auto fills = m.on_snapshot(prev, curr, /*now=*/42);
 
     ASSERT_EQ(fills.size(), 1u);
-    EXPECT_EQ(fills[0].id, r.id);
+    EXPECT_EQ(fills[0].id, 1u);
     EXPECT_EQ(fills[0].price, 100);   // resting limit price
     EXPECT_EQ(fills[0].qty, 5);
     EXPECT_EQ(fills[0].ts, 42);
-    EXPECT_FALSE(m.has_order(r.id));
+    EXPECT_FALSE(m.has_order(1));
 }
 
 TEST(Matcher, OnSnapshotDoesNotFillWhenVolumeMerelyDropped) {
     bt::PessimisticQueueModel qm;
     bt::Matcher m(qm);
     const auto prev = deep_book(100, 500, 200, 500);
-    auto r = m.submit(bt::Side::Buy, 100, 5, prev, 0);
+    auto r = m.submit(/*id=*/1, bt::Side::Buy, 100, 5, prev, 0);
     ASSERT_TRUE(r.accepted);
 
     // Volume drop, level still present — no fill, order still resting.
     const auto curr = deep_book(100, 50, 200, 500);
     auto fills = m.on_snapshot(prev, curr, 1);
     EXPECT_TRUE(fills.empty());
-    EXPECT_TRUE(m.has_order(r.id));
+    EXPECT_TRUE(m.has_order(1));
 }
 
 }  // namespace

@@ -32,27 +32,40 @@ public:
         OrderReject reject{};     // valid iff !accepted
     };
 
+    // Outcome of a cancel request. The matcher cannot distinguish "already
+    // filled" from "never existed" — both look the same in the id_index_,
+    // and that's exactly how a real exchange's CancelRejected payload works
+    // (it just says ORDER_NOT_FOUND).
+    enum class CancelResult { Cancelled, UnknownOrder };
+
     // The queue model is injected by reference — it is stateless and one
     // instance can be shared across the whole engine. The matcher does not
     // own its lifetime; the caller (the engine) keeps it alive.
-    explicit Matcher(const IQueueModel& queue_model, OrderId starting_id = 1) noexcept
-        : queue_model_(&queue_model), next_id_(starting_id) {}
+    explicit Matcher(const IQueueModel& queue_model) noexcept
+        : queue_model_(&queue_model) {}
 
-    // Submit a post-only limit order. The post-only check uses the book at
-    // *delivery* time (whatever the caller passes as `now` and `book`). In
-    // the engine this is post-latency, which is why a quote that was passive
-    // when the strategy sent it can still be rejected if the market moved.
+    // Submit a post-only limit order. The OrderId is assigned by the
+    // latency layer (which sits in front of the matcher) and passed in
+    // here — that way the strategy can hold a reference to an order that
+    // hasn't yet reached the matcher.
     //
-    // Acceptance: order is inserted at the back of its price level. Caller
-    // gets the assigned id.
-    // Rejection: nothing is inserted; result.reject is populated with
-    SubmitResult submit(Side side, Price price, Qty qty,
+    // The post-only check uses the book at *delivery* time, not at strategy
+    // submit time, which is why an order that was passive when the strategy
+    // sent it can still be rejected if the market moved during the latency
+    // window.
+    //
+    // Acceptance: order is inserted at the back of its price level; result.id
+    // echoes the caller-supplied id.
+    // Rejection: nothing is inserted; result.reject carries the same id and
+    // RejectReason::WouldCross.
+    SubmitResult submit(OrderId id, Side side, Price price, Qty qty,
                         const OrderBook& book, Timestamp now);
 
-    // Cancel by id. Silent no-op if the id is unknown — matches exchange
-    // semantics where an in-flight cancel of an already-filled order is
-    // routine, not an error.
-    void cancel(OrderId id, Timestamp now);
+    // Cancel by id. Returns CancelResult so the caller (the latency layer)
+    // can deliver a cancel-ack or cancel-reject back to the strategy. An
+    // unknown id is not an error here — the order may have been filled
+    // between strategy submit and cancel arrival.
+    CancelResult cancel(OrderId id, Timestamp now);
 
     // Match an incoming public trade print against resting orders.
     //
@@ -74,7 +87,6 @@ private:
     using SellBook = std::map<Price, std::deque<Order>>;
 
     const IQueueModel* queue_model_;
-    OrderId  next_id_;
     BuyBook  bids_;
     SellBook asks_;
 

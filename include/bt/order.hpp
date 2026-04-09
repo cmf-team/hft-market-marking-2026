@@ -30,13 +30,23 @@ struct Fill {
     Qty       qty{};
 };
 
-// Notification that a submitted order was rejected by the matcher. v1 only
-// produces these for post-only `WouldCross`. `id` is 0 because the matcher
-// never assigned an id to a rejected order.
+// Notification that the matcher rejected a submitted order
 struct OrderReject {
     OrderId      id{};
     Timestamp    ts{};
     RejectReason reason{};
+};
+
+// Reason a cancel request was rejected by the matcher. The matcher cannot
+// distinguish "already filled" from "never existed" — both surface as
+// UnknownOrder, mirroring how real exchanges report cancel-rejects.
+enum class CancelRejectReason { UnknownOrder };
+
+// Notification that a cancel request was rejected by the matcher.
+struct CancelReject {
+    OrderId            id{};
+    Timestamp          ts{};
+    CancelRejectReason reason{};
 };
 
 }  // namespace bt

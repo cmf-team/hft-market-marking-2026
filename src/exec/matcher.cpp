@@ -22,7 +22,7 @@ bool erase_from_level(std::deque<Order>& level, OrderId id) noexcept {
 
 }  // namespace
 
-Matcher::SubmitResult Matcher::submit(Side side, Price price, Qty qty,
+Matcher::SubmitResult Matcher::submit(OrderId id, Side side, Price price, Qty qty,
                                       const OrderBook& book, Timestamp now) {
     SubmitResult result;
 
@@ -32,13 +32,12 @@ Matcher::SubmitResult Matcher::submit(Side side, Price price, Qty qty,
     const bool sell_crosses = (side == Side::Sell) && !book.empty() && price <= book.best_bid();
     if (buy_crosses || sell_crosses) {
         result.accepted = false;
-        // id == 0: the matcher never assigned an id to a rejected order.
-        result.reject = OrderReject{ /*id=*/0, now, RejectReason::WouldCross };
+        result.reject = OrderReject{ id, now, RejectReason::WouldCross };
         return result;
     }
 
     Order o{};
-    o.id           = next_id_++;
+    o.id           = id;
     o.side         = side;
     o.price        = price;
     o.qty          = qty;
@@ -61,9 +60,9 @@ Matcher::SubmitResult Matcher::submit(Side side, Price price, Qty qty,
     return result;
 }
 
-void Matcher::cancel(OrderId id, Timestamp /*now*/) {
+Matcher::CancelResult Matcher::cancel(OrderId id, Timestamp /*now*/) {
     const auto idx_it = id_index_.find(id);
-    if (idx_it == id_index_.end()) return;
+    if (idx_it == id_index_.end()) return CancelResult::UnknownOrder;
     const auto [side, price] = idx_it->second;
 
     if (side == Side::Buy) {
@@ -80,6 +79,7 @@ void Matcher::cancel(OrderId id, Timestamp /*now*/) {
         }
     }
     id_index_.erase(idx_it);
+    return CancelResult::Cancelled;
 }
 
 std::vector<Fill> Matcher::on_trade(const Trade& trade, Timestamp now) {
