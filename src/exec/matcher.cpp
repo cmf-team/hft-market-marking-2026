@@ -106,7 +106,7 @@ std::vector<Fill> Matcher::on_trade(const Trade& trade, Timestamp now) {
                 const Qty take = std::min(want, remaining);
                 o.filled  += take;
                 remaining -= take;
-                fills.push_back(Fill{ o.id, now, o.price, take });
+                fills.push_back(Fill{ o.id, now, o.price, take, o.side });
                 if (o.filled == o.qty) {
                     id_index_.erase(o.id);
                     it = level.erase(it);
@@ -164,7 +164,7 @@ std::vector<Fill> Matcher::on_snapshot(const OrderBook& prev,
                     // re-cap defensively.
                     const Qty take = std::min(fill_qty, o.qty - o.filled);
                     o.filled += take;
-                    fills.push_back(Fill{ o.id, now, o.price, take });
+                    fills.push_back(Fill{ o.id, now, o.price, take, o.side });
                     if (o.filled == o.qty) {
                         id_index_.erase(o.id);
                         it = level.erase(it);

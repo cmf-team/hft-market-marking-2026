@@ -28,6 +28,7 @@ struct Fill {
     Timestamp ts{};
     Price     price{};   // resting order's limit price (no price improvement modeled)
     Qty       qty{};
+    Side      side{};    // side of the resting order being filled — needed by the portfolio
 };
 
 // Notification that the matcher rejected a submitted order

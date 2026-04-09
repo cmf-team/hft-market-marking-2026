@@ -6,6 +6,7 @@ add_library(bt_core STATIC
     exec/matcher.cpp
     exec/queue_model.cpp
     exec/latency.cpp
+    portfolio/portfolio.cpp
 )
 target_include_directories(bt_core
     PUBLIC  ${CMAKE_SOURCE_DIR}/include
