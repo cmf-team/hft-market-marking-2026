@@ -22,9 +22,14 @@ bool erase_from_level(std::deque<Order>& level, OrderId id) noexcept {
 
 }  // namespace
 
-Matcher::SubmitResult Matcher::submit(OrderId id, Side side, Price price, Qty qty,
+Matcher::SubmitResult Matcher::submit(Side side, Price price, Qty qty,
                                       const OrderBook& book, Timestamp now) {
     SubmitResult result;
+
+    // Always burn an id — even on reject — so the response is self-
+    // identifying and the latency layer can deliver an ack/reject the
+    // strategy can match back to its own request via FIFO.
+    const OrderId id = next_id_++;
 
     // Post-only check at delivery time. If the book is empty there's no
     // opposite side to cross, so the check is skipped.

@@ -41,24 +41,26 @@ public:
     // The queue model is injected by reference — it is stateless and one
     // instance can be shared across the whole engine. The matcher does not
     // own its lifetime; the caller (the engine) keeps it alive.
-    explicit Matcher(const IQueueModel& queue_model) noexcept
-        : queue_model_(&queue_model) {}
+    explicit Matcher(const IQueueModel& queue_model, OrderId starting_id = 1) noexcept
+        : queue_model_(&queue_model), next_id_(starting_id) {}
 
-    // Submit a post-only limit order. The OrderId is assigned by the
-    // latency layer (which sits in front of the matcher) and passed in
-    // here — that way the strategy can hold a reference to an order that
-    // hasn't yet reached the matcher.
+    // Submit a post-only limit order. The matcher assigns the OrderId — the
+    // strategy never sees it synchronously, only later via the latency-
+    // delayed on_submitted callback. This models real exchange behavior
+    // where the order id is part of the ack message that travels back over
+    // the wire.
     //
     // The post-only check uses the book at *delivery* time, not at strategy
     // submit time, which is why an order that was passive when the strategy
     // sent it can still be rejected if the market moved during the latency
     // window.
     //
-    // Acceptance: order is inserted at the back of its price level; result.id
-    // echoes the caller-supplied id.
-    // Rejection: nothing is inserted; result.reject carries the same id and
-    // RejectReason::WouldCross.
-    SubmitResult submit(OrderId id, Side side, Price price, Qty qty,
+    // Acceptance: order is inserted at the back of its price level; the
+    // assigned id is in result.id.
+    // Rejection: nothing is inserted; result.reject carries the assigned id
+    // and RejectReason::WouldCross. The id is consumed in either case so
+    // the response is always self-identifying.
+    SubmitResult submit(Side side, Price price, Qty qty,
                         const OrderBook& book, Timestamp now);
 
     // Cancel by id. Returns CancelResult so the caller (the latency layer)
@@ -87,6 +89,7 @@ private:
     using SellBook = std::map<Price, std::deque<Order>>;
 
     const IQueueModel* queue_model_;
+    OrderId            next_id_;
     BuyBook  bids_;
     SellBook asks_;
 

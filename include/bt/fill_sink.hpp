@@ -12,6 +12,14 @@ namespace bt {
 struct IFillSink {
     virtual ~IFillSink() = default;
 
+    // Delivered (with latency) after the matcher accepts a submit. This is
+    // how the strategy learns the OrderId assigned by the matcher — the
+    // submit() call itself returns nothing because, at a real exchange,
+    // the id arrives in the ack message that travels back over the wire.
+    // Acks are delivered FIFO, so the n-th submitted order produces the
+    // n-th on_submitted callback.
+    
+    virtual void on_submitted(OrderId id)                        = 0;
     virtual void on_fill(const Fill& fill)                       = 0;
     virtual void on_reject(const OrderReject& reject)            = 0;
     virtual void on_cancel_ack(OrderId id)                       = 0;

@@ -7,6 +7,7 @@ add_library(bt_core STATIC
     exec/queue_model.cpp
     exec/latency.cpp
     portfolio/portfolio.cpp
+    engine/backtest_engine.cpp
 )
 target_include_directories(bt_core
     PUBLIC  ${CMAKE_SOURCE_DIR}/include
