@@ -184,7 +184,8 @@ int main(int argc, char** argv) {
                   << "  latencies  = submit/cancel/fill us = "
                   << cfg.submit_us << '/' << cfg.cancel_us << '/' << cfg.fill_us << '\n'
                   << "  sample_us  = " << cfg.sample_us   << '\n'
-                  << "  quote_size = " << cfg.quote_size  << '\n';
+                  << "  quote_size = " << cfg.quote_size  << '\n'
+                  << std::flush;
 
         const auto t0 = std::chrono::steady_clock::now();
         const auto event_count = engine.run();
