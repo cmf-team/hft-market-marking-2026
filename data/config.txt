@@ -1,0 +1,38 @@
+# Backtester config — key=value, '#' starts a comment.
+# Any of these can be overridden on the CLI (e.g. --submit-us 250).
+
+# ----- Input / output paths -----
+# Relative paths are resolved against the process working directory.
+# Inside the Docker container that's /workspace, so e.g. data/lob.csv
+# refers to /workspace/data/lob.csv.
+lob    = data/lob.csv
+trades = data/trades.csv
+out    = out
+
+# ----- Instrument spec -----
+# tick_size: smallest price increment in human units. The user's sample data
+#            uses 1e-7 (so a Price of 110435 ticks = 0.0110435).
+# qty_scale: multiplier applied to a CSV amount to get internal integer Qty.
+#            1.0 for whole-integer amounts.
+tick_size = 1e-7
+qty_scale = 1
+
+# ----- Latency model (FixedLatencyModel, microseconds) -----
+# submit_us: strategy → matcher delay for new orders
+# cancel_us: strategy → matcher delay for cancels
+# fill_us:   matcher → strategy round-trip for acks / fills / rejects
+submit_us = 100
+cancel_us = 100
+fill_us   = 100
+
+# ----- Reporting -----
+# sample_us: equity-curve sample interval in microseconds. Drawdown is
+#            updated on every book event regardless; this knob only thins
+#            the equity_ samples written to equity.csv. 1_000_000 = 1 sample
+#            per second of market time. Set to 0 to record every book event
+#            (very large CSV on long runs).
+sample_us = 1000000
+
+# ----- Strategy (StaticQuoter) -----
+# quote_size: passive quote size posted on each side, in internal Qty units.
+quote_size = 1
