@@ -33,6 +33,20 @@ fill_us   = 100
 #            (very large CSV on long runs).
 sample_us = 1000000
 
-# ----- Strategy (StaticQuoter) -----
+# ----- Strategy selection -----
+# strategy: "static" (one-tick-off-touch quoter) or "as" (Avellaneda-Stoikov).
 # quote_size: passive quote size posted on each side, in internal Qty units.
+strategy   = as
 quote_size = 1
+
+# ----- Avellaneda-Stoikov parameters (used when strategy = as) -----
+# gamma:      risk-aversion. Higher = wider spread + stronger inventory skew.
+# k:          order-arrival intensity. Higher = tighter spread (more competition).
+# sigma_init: seed for the EWMA volatility estimator (in ticks per book step).
+# vol_alpha:  EWMA smoothing coefficient for sigma^2; 0 freezes sigma at sigma_init.
+# horizon_us: total session length used to compute (T - t)/T. Default = 1 day.
+gamma      = 0.1
+k          = 1.5
+sigma_init = 1.0
+vol_alpha  = 0.05
+horizon_us = 86400000000

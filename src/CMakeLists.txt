@@ -10,6 +10,7 @@ add_library(bt_core STATIC
     engine/backtest_engine.cpp
     stats/stats.cpp
     strategies/static_quoter.cpp
+    strategies/avellaneda_stoikov_quoter.cpp
 )
 target_include_directories(bt_core
     PUBLIC  ${CMAKE_SOURCE_DIR}/include
@@ -22,3 +23,5 @@ add_executable(backtester main.cpp)
 # private engine header (which in turn pulls exec/latency.hpp and exec/matcher.hpp).
 target_include_directories(backtester PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(backtester PRIVATE bt_core)
+
+add_subdirectory(pointers)

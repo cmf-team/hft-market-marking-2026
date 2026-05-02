@@ -5,7 +5,10 @@
 //              [--config <config_path>]
 //              [--tick-size <double>] [--qty-scale <double>]
 //              [--submit-us <int>] [--cancel-us <int>] [--fill-us <int>]
+//              [--strategy static|as]
 //              [--quote-size <int>]
+//              [--gamma <double>] [--k <double>] [--sigma-init <double>]
+//              [--vol-alpha <double>] [--horizon-us <int>]
 //
 // Config file (optional, key=value, '#' starts a comment) can supply any of
 // the same knobs; CLI flags override config-file values. Defaults match the
@@ -18,6 +21,7 @@
 
 #include "engine/backtest_engine.hpp"
 
+#include "bt/avellaneda_stoikov_quoter.hpp"
 #include "bt/csv_lob_loader.hpp"
 #include "bt/csv_trade_loader.hpp"
 #include "bt/event_stream.hpp"
@@ -25,6 +29,7 @@
 #include "bt/queue_model.hpp"
 #include "bt/static_quoter.hpp"
 #include "bt/stats.hpp"
+#include "bt/strategy.hpp"
 #include "bt/types.hpp"
 
 #include <charconv>
@@ -35,6 +40,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -56,7 +62,17 @@ struct Config {
     bt::Timestamp    cancel_us      = 0;
     bt::Timestamp    fill_us        = 0;
     bt::Timestamp    sample_us      = 1'000'000;  // equity-curve sample interval; 1s default
+
+    // Strategy selection: "static" or "as" (Avellaneda-Stoikov).
+    std::string      strategy       = "as";
     bt::Qty          quote_size     = 1;
+
+    // Avellaneda-Stoikov parameters (ignored when strategy != "as").
+    double           gamma          = 0.1;
+    double           k              = 1.5;
+    double           sigma_init     = 1.0;
+    double           vol_alpha      = 0.05;
+    bt::Timestamp    horizon_us     = 86'400'000'000LL;  // 1 day
 };
 
 void print_usage() {
@@ -65,7 +81,10 @@ void print_usage() {
         "                  [--config <config_path>]\n"
         "                  [--tick-size <double>] [--qty-scale <double>]\n"
         "                  [--submit-us <int>] [--cancel-us <int>] [--fill-us <int>]\n"
-        "                  [--sample-us <int>] [--quote-size <int>]\n";
+        "                  [--sample-us <int>]\n"
+        "                  [--strategy static|as] [--quote-size <int>]\n"
+        "                  [--gamma <double>] [--k <double>] [--sigma-init <double>]\n"
+        "                  [--vol-alpha <double>] [--horizon-us <int>]\n";
 }
 
 [[nodiscard]] std::string trim(std::string_view sv) {
@@ -76,16 +95,22 @@ void print_usage() {
 }
 
 void apply_kv(Config& cfg, const std::string& key, const std::string& val) {
-    if      (key == "lob")        cfg.lob_path    = val;
-    else if (key == "trades")     cfg.trades_path = val;
-    else if (key == "out")        cfg.out_dir     = val;
-    else if (key == "tick_size")  cfg.tick_size   = std::stod(val);
-    else if (key == "qty_scale")  cfg.qty_scale   = std::stod(val);
-    else if (key == "submit_us")  cfg.submit_us   = std::stoll(val);
-    else if (key == "cancel_us")  cfg.cancel_us   = std::stoll(val);
-    else if (key == "fill_us")    cfg.fill_us     = std::stoll(val);
-    else if (key == "sample_us")  cfg.sample_us   = std::stoll(val);
-    else if (key == "quote_size") cfg.quote_size  = std::stoll(val);
+    if      (key == "lob")         cfg.lob_path    = val;
+    else if (key == "trades")      cfg.trades_path = val;
+    else if (key == "out")         cfg.out_dir     = val;
+    else if (key == "tick_size")   cfg.tick_size   = std::stod(val);
+    else if (key == "qty_scale")   cfg.qty_scale   = std::stod(val);
+    else if (key == "submit_us")   cfg.submit_us   = std::stoll(val);
+    else if (key == "cancel_us")   cfg.cancel_us   = std::stoll(val);
+    else if (key == "fill_us")     cfg.fill_us     = std::stoll(val);
+    else if (key == "sample_us")   cfg.sample_us   = std::stoll(val);
+    else if (key == "strategy")    cfg.strategy    = val;
+    else if (key == "quote_size")  cfg.quote_size  = std::stoll(val);
+    else if (key == "gamma")       cfg.gamma       = std::stod(val);
+    else if (key == "k")           cfg.k           = std::stod(val);
+    else if (key == "sigma_init")  cfg.sigma_init  = std::stod(val);
+    else if (key == "vol_alpha")   cfg.vol_alpha   = std::stod(val);
+    else if (key == "horizon_us")  cfg.horizon_us  = std::stoll(val);
     else throw std::runtime_error("unknown config key: " + key);
 }
 
@@ -131,17 +156,23 @@ Config parse_args(int argc, char** argv) {
 
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
-        if      (a == "--lob")        cfg.lob_path    = need_value(i, a.c_str());
-        else if (a == "--trades")     cfg.trades_path = need_value(i, a.c_str());
-        else if (a == "--out")        cfg.out_dir     = need_value(i, a.c_str());
-        else if (a == "--config")     { (void)need_value(i, a.c_str()); /* already handled */ }
-        else if (a == "--tick-size")  cfg.tick_size   = std::stod(need_value(i, a.c_str()));
-        else if (a == "--qty-scale")  cfg.qty_scale   = std::stod(need_value(i, a.c_str()));
-        else if (a == "--submit-us")  cfg.submit_us   = std::stoll(need_value(i, a.c_str()));
-        else if (a == "--cancel-us")  cfg.cancel_us   = std::stoll(need_value(i, a.c_str()));
-        else if (a == "--fill-us")    cfg.fill_us     = std::stoll(need_value(i, a.c_str()));
-        else if (a == "--sample-us")  cfg.sample_us   = std::stoll(need_value(i, a.c_str()));
-        else if (a == "--quote-size") cfg.quote_size  = std::stoll(need_value(i, a.c_str()));
+        if      (a == "--lob")         cfg.lob_path    = need_value(i, a.c_str());
+        else if (a == "--trades")      cfg.trades_path = need_value(i, a.c_str());
+        else if (a == "--out")         cfg.out_dir     = need_value(i, a.c_str());
+        else if (a == "--config")      { (void)need_value(i, a.c_str()); /* already handled */ }
+        else if (a == "--tick-size")   cfg.tick_size   = std::stod(need_value(i, a.c_str()));
+        else if (a == "--qty-scale")   cfg.qty_scale   = std::stod(need_value(i, a.c_str()));
+        else if (a == "--submit-us")   cfg.submit_us   = std::stoll(need_value(i, a.c_str()));
+        else if (a == "--cancel-us")   cfg.cancel_us   = std::stoll(need_value(i, a.c_str()));
+        else if (a == "--fill-us")     cfg.fill_us     = std::stoll(need_value(i, a.c_str()));
+        else if (a == "--sample-us")   cfg.sample_us   = std::stoll(need_value(i, a.c_str()));
+        else if (a == "--strategy")    cfg.strategy    = need_value(i, a.c_str());
+        else if (a == "--quote-size")  cfg.quote_size  = std::stoll(need_value(i, a.c_str()));
+        else if (a == "--gamma")       cfg.gamma       = std::stod(need_value(i, a.c_str()));
+        else if (a == "--k")           cfg.k           = std::stod(need_value(i, a.c_str()));
+        else if (a == "--sigma-init")  cfg.sigma_init  = std::stod(need_value(i, a.c_str()));
+        else if (a == "--vol-alpha")   cfg.vol_alpha   = std::stod(need_value(i, a.c_str()));
+        else if (a == "--horizon-us")  cfg.horizon_us  = std::stoll(need_value(i, a.c_str()));
         else if (a == "-h" || a == "--help") { print_usage(); std::exit(0); }
         else throw std::runtime_error("unknown argument: " + a);
     }
@@ -171,9 +202,25 @@ int main(int argc, char** argv) {
 
         bt::PessimisticQueueModel qm;
         bt::FixedLatencyModel     lm(cfg.submit_us, cfg.cancel_us, cfg.fill_us);
-        bt::StaticQuoter          strat(cfg.quote_size);
 
-        bt::BacktestEngine engine(stream, qm, lm, strat);
+        std::unique_ptr<bt::IStrategy> strat;
+        if (cfg.strategy == "static") {
+            strat = std::make_unique<bt::StaticQuoter>(cfg.quote_size);
+        } else if (cfg.strategy == "as" || cfg.strategy == "avellaneda_stoikov") {
+            bt::AvellanedaStoikovQuoter::Params p;
+            p.quote_size     = cfg.quote_size;
+            p.gamma          = cfg.gamma;
+            p.k              = cfg.k;
+            p.sigma_init     = cfg.sigma_init;
+            p.vol_ewma_alpha = cfg.vol_alpha;
+            p.horizon_us     = cfg.horizon_us;
+            strat = std::make_unique<bt::AvellanedaStoikovQuoter>(p);
+        } else {
+            throw std::runtime_error("unknown --strategy: " + cfg.strategy +
+                                     " (expected 'static' or 'as')");
+        }
+
+        bt::BacktestEngine engine(stream, qm, lm, *strat);
         engine.set_sample_interval(cfg.sample_us);
 
         std::cout << "Running backtest:\n"
@@ -184,8 +231,16 @@ int main(int argc, char** argv) {
                   << "  latencies  = submit/cancel/fill us = "
                   << cfg.submit_us << '/' << cfg.cancel_us << '/' << cfg.fill_us << '\n'
                   << "  sample_us  = " << cfg.sample_us   << '\n'
-                  << "  quote_size = " << cfg.quote_size  << '\n'
-                  << std::flush;
+                  << "  strategy   = " << cfg.strategy    << '\n'
+                  << "  quote_size = " << cfg.quote_size  << '\n';
+        if (cfg.strategy == "as" || cfg.strategy == "avellaneda_stoikov") {
+            std::cout << "  gamma      = " << cfg.gamma      << '\n'
+                      << "  k          = " << cfg.k          << '\n'
+                      << "  sigma_init = " << cfg.sigma_init << '\n'
+                      << "  vol_alpha  = " << cfg.vol_alpha  << '\n'
+                      << "  horizon_us = " << cfg.horizon_us << '\n';
+        }
+        std::cout << std::flush;
 
         const auto t0 = std::chrono::steady_clock::now();
         const auto event_count = engine.run();
