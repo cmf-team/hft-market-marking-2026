@@ -26,6 +26,7 @@
 #include "bt/csv_trade_loader.hpp"
 #include "bt/event_stream.hpp"
 #include "bt/latency_model.hpp"
+#include "bt/micro_price_quoter.hpp"
 #include "bt/queue_model.hpp"
 #include "bt/static_quoter.hpp"
 #include "bt/stats.hpp"
@@ -73,6 +74,12 @@ struct Config {
     double           sigma_init     = 1.0;
     double           vol_alpha      = 0.05;
     bt::Timestamp    horizon_us     = 86'400'000'000LL;  // 1 day
+
+    // Micro-price parameters (ignored when strategy != "micro").
+    bt::Price        mp_half_spread     = 1;     // ticks
+    double           mp_inventory_skew  = 0.0;   // ticks per inventory unit
+    std::size_t      mp_imbalance_depth = 1;     // levels averaged into I
+    bool             mp_passive_only    = true;  // clamp quotes to same-side touch
 };
 
 void print_usage() {
@@ -82,9 +89,11 @@ void print_usage() {
         "                  [--tick-size <double>] [--qty-scale <double>]\n"
         "                  [--submit-us <int>] [--cancel-us <int>] [--fill-us <int>]\n"
         "                  [--sample-us <int>]\n"
-        "                  [--strategy static|as] [--quote-size <int>]\n"
+        "                  [--strategy static|as|micro] [--quote-size <int>]\n"
         "                  [--gamma <double>] [--k <double>] [--sigma-init <double>]\n"
-        "                  [--vol-alpha <double>] [--horizon-us <int>]\n";
+        "                  [--vol-alpha <double>] [--horizon-us <int>]\n"
+        "                  [--mp-half-spread <int>] [--mp-skew <double>]\n"
+        "                  [--mp-imbalance-depth <int>] [--mp-passive-only 0|1]\n";
 }
 
 [[nodiscard]] std::string trim(std::string_view sv) {
@@ -111,6 +120,10 @@ void apply_kv(Config& cfg, const std::string& key, const std::string& val) {
     else if (key == "sigma_init")  cfg.sigma_init  = std::stod(val);
     else if (key == "vol_alpha")   cfg.vol_alpha   = std::stod(val);
     else if (key == "horizon_us")  cfg.horizon_us  = std::stoll(val);
+    else if (key == "mp_half_spread")     cfg.mp_half_spread     = std::stoll(val);
+    else if (key == "mp_inventory_skew")  cfg.mp_inventory_skew  = std::stod(val);
+    else if (key == "mp_imbalance_depth") cfg.mp_imbalance_depth = static_cast<std::size_t>(std::stoull(val));
+    else if (key == "mp_passive_only")    cfg.mp_passive_only    = (std::stoi(val) != 0);
     else throw std::runtime_error("unknown config key: " + key);
 }
 
@@ -173,6 +186,10 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--sigma-init")  cfg.sigma_init  = std::stod(need_value(i, a.c_str()));
         else if (a == "--vol-alpha")   cfg.vol_alpha   = std::stod(need_value(i, a.c_str()));
         else if (a == "--horizon-us")  cfg.horizon_us  = std::stoll(need_value(i, a.c_str()));
+        else if (a == "--mp-half-spread")     cfg.mp_half_spread     = std::stoll(need_value(i, a.c_str()));
+        else if (a == "--mp-skew")            cfg.mp_inventory_skew  = std::stod(need_value(i, a.c_str()));
+        else if (a == "--mp-imbalance-depth") cfg.mp_imbalance_depth = static_cast<std::size_t>(std::stoull(need_value(i, a.c_str())));
+        else if (a == "--mp-passive-only")    cfg.mp_passive_only    = (std::stoi(need_value(i, a.c_str())) != 0);
         else if (a == "-h" || a == "--help") { print_usage(); std::exit(0); }
         else throw std::runtime_error("unknown argument: " + a);
     }
@@ -215,9 +232,17 @@ int main(int argc, char** argv) {
             p.vol_ewma_alpha = cfg.vol_alpha;
             p.horizon_us     = cfg.horizon_us;
             strat = std::make_unique<bt::AvellanedaStoikovQuoter>(p);
+        } else if (cfg.strategy == "micro" || cfg.strategy == "micro_price") {
+            bt::MicroPriceQuoter::Params p;
+            p.quote_size       = cfg.quote_size;
+            p.half_spread      = cfg.mp_half_spread;
+            p.inventory_skew   = cfg.mp_inventory_skew;
+            p.imbalance_depth  = cfg.mp_imbalance_depth;
+            p.passive_only     = cfg.mp_passive_only;
+            strat = std::make_unique<bt::MicroPriceQuoter>(p);
         } else {
             throw std::runtime_error("unknown --strategy: " + cfg.strategy +
-                                     " (expected 'static' or 'as')");
+                                     " (expected 'static', 'as', or 'micro')");
         }
 
         bt::BacktestEngine engine(stream, qm, lm, *strat);
@@ -239,6 +264,11 @@ int main(int argc, char** argv) {
                       << "  sigma_init = " << cfg.sigma_init << '\n'
                       << "  vol_alpha  = " << cfg.vol_alpha  << '\n'
                       << "  horizon_us = " << cfg.horizon_us << '\n';
+        } else if (cfg.strategy == "micro" || cfg.strategy == "micro_price") {
+            std::cout << "  mp_half_spread     = " << cfg.mp_half_spread     << '\n'
+                      << "  mp_inventory_skew  = " << cfg.mp_inventory_skew  << '\n'
+                      << "  mp_imbalance_depth = " << cfg.mp_imbalance_depth << '\n'
+                      << "  mp_passive_only    = " << (cfg.mp_passive_only ? "true" : "false") << '\n';
         }
         std::cout << std::flush;
 
@@ -259,18 +289,25 @@ int main(int argc, char** argv) {
 
         const fs::path summary_path = fs::path(cfg.out_dir) / "report.txt";
         const fs::path equity_path  = fs::path(cfg.out_dir) / "equity.csv";
+        const fs::path fills_path   = fs::path(cfg.out_dir) / "fills.csv";
         {
             std::ofstream out(summary_path);
             if (!out) throw std::runtime_error("cannot write " + summary_path.string());
-            s.write_summary(out, spec);
+            s.write_summary(out, spec, engine.portfolio().avg_entry_price());
         }
         {
             std::ofstream out(equity_path);
             if (!out) throw std::runtime_error("cannot write " + equity_path.string());
             s.write_equity_csv(out, spec);
         }
+        {
+            std::ofstream out(fills_path);
+            if (!out) throw std::runtime_error("cannot write " + fills_path.string());
+            s.write_fills_csv(out, spec);
+        }
         std::cout << "\nWrote " << summary_path.string()
-                  << "\n      " << equity_path.string() << '\n';
+                  << "\n      " << equity_path.string()
+                  << "\n      " << fills_path.string()  << '\n';
         return 0;
     } catch (const std::exception& e) {
         std::cerr << "ERROR: " << e.what() << '\n';

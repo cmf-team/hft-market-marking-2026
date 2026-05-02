@@ -11,6 +11,7 @@ add_library(bt_core STATIC
     stats/stats.cpp
     strategies/static_quoter.cpp
     strategies/avellaneda_stoikov_quoter.cpp
+    strategies/micro_price_quoter.cpp
 )
 target_include_directories(bt_core
     PUBLIC  ${CMAKE_SOURCE_DIR}/include

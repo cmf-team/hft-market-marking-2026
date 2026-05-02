@@ -43,6 +43,10 @@ void Stats::on_fill(const Fill& fill) noexcept {
     const std::int64_t notional = static_cast<std::int64_t>(fill.price) *
                                   static_cast<std::int64_t>(fill.qty);
     gross_pnl_ticks_ += (fill.side == Side::Buy) ? -notional : notional;
+
+    position_ += (fill.side == Side::Buy) ? fill.qty : -fill.qty;
+
+    fills_.push_back(FillSample{ fill.ts, fill.side, fill.price, fill.qty });
 }
 
 void Stats::on_mark(Timestamp now, std::int64_t equity_ticks) noexcept {
@@ -82,7 +86,8 @@ double Stats::reject_rate() const noexcept {
     return static_cast<double>(rejected_) / static_cast<double>(submitted_);
 }
 
-void Stats::write_summary(std::ostream& out, const InstrumentSpec& spec) const {
+void Stats::write_summary(std::ostream& out, const InstrumentSpec& spec,
+                          Price final_avg_entry_ticks) const {
     out << std::fixed << std::setprecision(8);
     out << "=== Backtest summary ===\n";
     if (have_mark_) {
@@ -102,6 +107,10 @@ void Stats::write_summary(std::ostream& out, const InstrumentSpec& spec) const {
     out << std::setprecision(8);
     out << "fill_count:         " << fill_count_  << '\n';
     out << "total_volume:       " << from_qty(total_volume_, spec) << '\n';
+    out << "final_position:     " << from_qty(position_, spec) << '\n';
+    if (position_ != 0 && final_avg_entry_ticks != 0) {
+        out << "final_avg_entry:    " << from_ticks(final_avg_entry_ticks, spec) << '\n';
+    }
 
     // Final realized + unrealized PnL is the last equity sample (ticks ×
     // qty); convert to a human currency-per-unit value via tick_size.
@@ -119,6 +128,17 @@ void Stats::write_equity_csv(std::ostream& out, const InstrumentSpec& spec) cons
     for (const auto& p : equity_) {
         out << p.ts << ','
             << static_cast<double>(p.equity_ticks) * spec.tick_size << '\n';
+    }
+}
+
+void Stats::write_fills_csv(std::ostream& out, const InstrumentSpec& spec) const {
+    out << "ts_us,side,price,qty\n";
+    out << std::fixed << std::setprecision(10);
+    for (const auto& f : fills_) {
+        out << f.ts << ','
+            << (f.side == Side::Buy ? "buy" : "sell") << ','
+            << from_ticks(f.price, spec) << ','
+            << from_qty(f.qty, spec) << '\n';
     }
 }
 

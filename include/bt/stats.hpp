@@ -56,6 +56,11 @@ public:
     [[nodiscard]] Qty         total_volume()    const noexcept { return total_volume_; }
     [[nodiscard]] std::int64_t gross_pnl_ticks() const noexcept { return gross_pnl_ticks_; }
 
+    // Net signed position from our own fills: positive = long, negative =
+    // short, 0 = flat. Mirrors Portfolio::position() but lives here so
+    // write_summary doesn't need a Portfolio reference.
+    [[nodiscard]] Qty         final_position()  const noexcept { return position_; }
+
     // Max drawdown is `peak_equity - trough` over the equity curve, in
     // int64 ticks × qty. Always >= 0.
     [[nodiscard]] std::int64_t max_drawdown_ticks() const noexcept { return max_drawdown_; }
@@ -69,17 +74,43 @@ public:
     };
     [[nodiscard]] const std::vector<EquityPoint>& equity_curve() const noexcept { return equity_; }
 
+    // Per-fill record kept for post-run analysis (overlaying fill markers on
+    // the equity curve, slicing PnL by side, etc.). Stored for every fill
+    // the engine routes through Stats::on_fill — same cardinality as
+    // fill_count(). Memory: ~32 bytes/fill, fine for a backtest run.
+    struct FillSample {
+        Timestamp ts;
+        Side      side;
+        Price     price;   // ticks
+        Qty       qty;
+    };
+    [[nodiscard]] const std::vector<FillSample>& fills() const noexcept { return fills_; }
+
     // ----- Report writers -----------------------------------------------------
 
     // Human-readable summary. Includes the InstrumentSpec so the report is
     // self-describing — a reader can recover the human price/qty units from
     // the int-tick values without consulting the config.
-    void write_summary(std::ostream& out, const InstrumentSpec& spec) const;
+    //
+    // `final_avg_entry_ticks` is the weighted-average entry price of the
+    // currently-open position (Portfolio::avg_entry_price()). Pass 0 when
+    // there is no open position (or when the caller doesn't have a
+    // portfolio handy — the line is then suppressed).
+    void write_summary(std::ostream& out, const InstrumentSpec& spec,
+                       Price final_avg_entry_ticks = 0) const;
 
     // CSV equity curve: header `ts_us,equity` followed by one row per sample.
     // The equity column is converted to a human price units via `tick_size`
     // (so it has the same scale as a per-unit PnL). Volume is not included.
     void write_equity_csv(std::ostream& out, const InstrumentSpec& spec) const;
+
+    // CSV fills log: header `ts_us,side,price,qty` followed by one row per
+    // fill (in the order they were booked by Stats::on_fill). Price is
+    // converted to human units via `tick_size`; qty via `qty_scale`. Side
+    // is the resting order's side: "buy" means we accumulated long, "sell"
+    // means we sold. Useful for overlaying fill markers on the equity
+    // curve to see where the strategy actually transacted.
+    void write_fills_csv(std::ostream& out, const InstrumentSpec& spec) const;
 
 private:
     std::size_t  submitted_       = 0;
@@ -89,6 +120,10 @@ private:
     std::int64_t gross_pnl_ticks_ = 0;  // sum over fills of signed (price * qty);
                                         // not directly comparable to portfolio PnL,
                                         // but useful as a sanity figure in the report.
+    Qty          position_        = 0;  // signed running net of buy - sell qty
+
+    // Per-fill log, written out as fills.csv at end of run.
+    std::vector<FillSample> fills_;
 
     // Equity-curve & drawdown state.
     std::vector<EquityPoint> equity_;
