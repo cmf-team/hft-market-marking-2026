@@ -2,13 +2,15 @@
 
 #include "common/BasicTypes.hpp"
 
-namespace cmf {
+namespace cmf
+{
 
-struct Trade {
+struct Trade
+{
     NanoTime ts{0};
-    Side     side{Side::Buy};
-    Price    price{0.0};
+    Side side{Side::Buy};
+    Price price{0.0};
     Quantity amount{0.0};
 };
 
-}  // namespace cmf
+} // namespace cmf

@@ -5,25 +5,28 @@
 #include <array>
 #include <cstddef>
 
-namespace cmf {
+namespace cmf
+{
 
-struct PriceLevel {
-    Price    price{0.0};
+struct PriceLevel
+{
+    Price price{0.0};
     Quantity amount{0.0};
 };
 
-class OrderBook {
-public:
+class OrderBook
+{
+  public:
     static constexpr std::size_t kDepth = 25;
 
     OrderBook() = default;
 
-    void update(NanoTime                          ts,
-                const std::array<PriceLevel, kDepth>&  asks,
-                const std::array<PriceLevel, kDepth>&  bids);
+    void update(NanoTime ts,
+                const std::array<PriceLevel, kDepth>& asks,
+                const std::array<PriceLevel, kDepth>& bids);
 
     NanoTime timestamp() const noexcept { return ts_; }
-    void          set_timestamp(NanoTime ts) noexcept { ts_ = ts; }
+    void set_timestamp(NanoTime ts) noexcept { ts_ = ts; }
 
     std::array<PriceLevel, kDepth>& asks() noexcept { return asks_; }
     std::array<PriceLevel, kDepth>& bids() noexcept { return bids_; }
@@ -39,10 +42,10 @@ public:
 
     bool empty() const noexcept;
 
-private:
-    NanoTime                   ts_{0};
-    std::array<PriceLevel, kDepth>  asks_{};
-    std::array<PriceLevel, kDepth>  bids_{};
+  private:
+    NanoTime ts_{0};
+    std::array<PriceLevel, kDepth> asks_{};
+    std::array<PriceLevel, kDepth> bids_{};
 };
 
-}  // namespace cmf
+} // namespace cmf

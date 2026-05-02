@@ -33,11 +33,16 @@ def summary(df: pd.DataFrame) -> None:
     max_eq = df["equity"].max()
 
     eq_chg = df["equity"].diff().dropna()
-    sharpe = (eq_chg.mean() / eq_chg.std() * (len(eq_chg) ** 0.5)
-              if eq_chg.std() > 0 else float("nan"))
+    sharpe = (
+        eq_chg.mean() / eq_chg.std() * (len(eq_chg) ** 0.5)
+        if eq_chg.std() > 0
+        else float("nan")
+    )
 
-    print(f"\n--- PnL Summary ---")
-    print(f"Period:        {t0:%Y-%m-%d %H:%M}  ->  {t1:%Y-%m-%d %H:%M}  ({duration_h:.1f}h)")
+    print("\n--- PnL Summary ---")
+    print(
+        f"Period:        {t0:%Y-%m-%d %H:%M}  ->  {t1:%Y-%m-%d %H:%M}  ({duration_h:.1f}h)"
+    )
     print(f"Total PnL:     {total_pnl:+.2f}")
     print(f"Max equity:    {max_eq:.2f}")
     print(f"Max drawdown:  {max_dd:.2f}")
@@ -51,7 +56,10 @@ def plot(df: pd.DataFrame, output_path: str | None) -> None:
     fig.suptitle("Market Maker - PnL Dynamics", fontsize=13, fontweight="bold", y=0.98)
 
     gs = gridspec.GridSpec(
-        4, 1, figure=fig, hspace=0.08,
+        4,
+        1,
+        figure=fig,
+        hspace=0.08,
         height_ratios=[3, 1.5, 2, 2],
     )
     axes = [fig.add_subplot(gs[i]) for i in range(4)]
@@ -64,12 +72,21 @@ def plot(df: pd.DataFrame, output_path: str | None) -> None:
     # panel 0: equity (total PnL) + cash (realized PnL)
     ax = axes[0]
     ax.plot(ts, df["equity"], color="#2171b5", linewidth=0.9, label="Equity (MtM)")
-    ax.plot(ts, df["cash"],   color="#e6550d", linewidth=0.9, linestyle="--", label="Cash (realized)")
+    ax.plot(
+        ts,
+        df["cash"],
+        color="#e6550d",
+        linewidth=0.9,
+        linestyle="--",
+        label="Cash (realized)",
+    )
     ax.axhline(0, color="#999", linewidth=0.5, linestyle="--")
-    ax.fill_between(ts, df["equity"], 0,
-                    where=df["equity"] >= 0, alpha=0.12, color="#2171b5")
-    ax.fill_between(ts, df["equity"], 0,
-                    where=df["equity"] < 0, alpha=0.15, color="#d73027")
+    ax.fill_between(
+        ts, df["equity"], 0, where=df["equity"] >= 0, alpha=0.12, color="#2171b5"
+    )
+    ax.fill_between(
+        ts, df["equity"], 0, where=df["equity"] < 0, alpha=0.15, color="#d73027"
+    )
     ax.set_ylabel("PnL", fontsize=9)
     ax.legend(loc="upper left", fontsize=8)
     ax.grid(True, alpha=0.25)
@@ -122,7 +139,8 @@ def main() -> None:
         help="Path to pnl_timeseries.csv (default: results/pnl_timeseries.csv)",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default=None,
         help="Save plot to file instead of displaying (e.g. results/pnl.png)",
     )
@@ -133,7 +151,9 @@ def main() -> None:
         df = load(args.input)
     except FileNotFoundError:
         print(f"Error: file not found: {args.input}", file=sys.stderr)
-        print("Run the backtester first:  ./build/bin/hft-market-making", file=sys.stderr)
+        print(
+            "Run the backtester first:  ./build/bin/hft-market-making", file=sys.stderr
+        )
         sys.exit(1)
 
     print(f"Loaded {len(df):,} rows")

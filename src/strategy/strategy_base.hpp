@@ -4,10 +4,12 @@
 #include "core/event.hpp"
 #include "exec/fill.hpp"
 
-namespace cmf {
+namespace cmf
+{
 
-class StrategyBase {
-public:
+class StrategyBase
+{
+  public:
     virtual ~StrategyBase() = default;
 
     virtual void on_book_update(const OrderBook& /*book*/) {}
@@ -15,4 +17,4 @@ public:
     virtual void on_fill(const Fill& /*fill*/) {}
 };
 
-}  // namespace cmf
+} // namespace cmf
