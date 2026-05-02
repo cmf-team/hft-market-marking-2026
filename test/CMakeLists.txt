@@ -20,6 +20,8 @@ add_executable(${TARGET} ${TEST_SRC})
 target_link_libraries(${TARGET} PRIVATE
     Catch2-static-lib
     hft-market-making-common
+    hft-market-making-strategy
+    hft-market-making-backtest
 )
 
 # Register the tests with CTest

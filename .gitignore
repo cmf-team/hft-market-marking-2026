@@ -5,6 +5,13 @@ log
 .claude
 CLAUDE.md
 
+# Backtest run artefacts -- генерируются на лету, не должны попадать в репо.
+reports/
+
+# Большие исторические данные курса -- лежат локально, не в git.
+MD/
+*.feather
+
 
 ### C++ ###
 # Prerequisites
