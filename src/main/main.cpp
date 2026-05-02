@@ -16,9 +16,11 @@ int main(int argc, char** argv)
     {
         std::string book_path   = (argc > 1) ? argv[1] : "data/lob.csv";
         std::string trades_path = (argc > 2) ? argv[2] : "data/trades.csv";
+        std::string output_dir  = (argc > 3) ? argv[3] : "results";
 
         std::cout << "book:   " << book_path   << '\n'
-                  << "trades: " << trades_path << '\n';
+                  << "trades: " << trades_path << '\n'
+                  << "output: " << output_dir  << "/pnl_timeseries.csv\n";
 
         cmf::Backtester     bt(book_path, trades_path);
         cmf::MatchingEngine me;
@@ -26,6 +28,7 @@ int main(int argc, char** argv)
         cmf::PnLTracker     pnl;
 
         mm.set_matching_engine(&me);
+        bt.enable_csv_output(output_dir + "/pnl_timeseries.csv");
 
         auto t0 = std::chrono::steady_clock::now();
         bt.run(&mm, &me, &pnl);

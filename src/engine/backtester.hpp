@@ -19,6 +19,9 @@ public:
              MatchingEngine* me       = nullptr,
              PnLTracker*     pnl      = nullptr);
 
+    // Enable time-series CSV output sampled every `sample_every` book events.
+    void enable_csv_output(const std::string& path, std::size_t sample_every = 100);
+
     const EventStream& stream() const noexcept { return stream_; }
 
     std::size_t book_events()   const noexcept { return stream_.book_events(); }
@@ -28,6 +31,8 @@ public:
 private:
     EventStream   stream_;
     NanoTime last_ts_{0};
+    std::string   csv_path_;
+    std::size_t   csv_sample_every_{100};
 };
 
 }  // namespace cmf

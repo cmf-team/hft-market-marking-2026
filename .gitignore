@@ -5,6 +5,7 @@ log
 .claude
 CLAUDE.md
 /data
+/results
 
 ### C++ ###
 # Prerequisites
