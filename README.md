@@ -115,3 +115,29 @@ The current pre-commit hooks do the following:
 - format and lint C++ code with `clang-format`;
 - format and lint Python code with `ruff`;
 - strip outputs from Jupyter notebooks.
+
+
+## Solution
+
+```bash
+./build/bin/hft-market-making --strategy as \
+  --gamma 1000 --k 5e5 --horizon 2 --fixed-horizon \
+  --sigma-window 2000 --max-inv 5000 --qty 100
+Data:
+  trades: MD/trades.csv
+  lob:    MD/lob.csv
+  partial fills: on
+  strategy: as
+  Events: 22M  Inv: 16  PnL: -40.489562  Fills: 334746  30.9ss
+
+  Completed in 32.3s
+  22901679 events (21864989 trades, 1036690 LOB)
+  Throughput: 709419 events/s
+
+========== Report ==========
+  PnL:        -41.466811
+  Inventory:  208
+  Turnover:   285867.2159
+==============================
+```
+Still got negative PnL.
