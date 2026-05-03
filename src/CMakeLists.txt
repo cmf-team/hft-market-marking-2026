@@ -1,2 +1,5 @@
 add_subdirectory(common)
+add_subdirectory(engine)
+add_subdirectory(io)
+add_subdirectory(strategy)
 add_subdirectory(main)
