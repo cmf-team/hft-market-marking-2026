@@ -5,6 +5,14 @@ log
 .claude
 CLAUDE.md
 
+# Market data (downloaded separately, see MD/README.md)
+MD/*.csv
+MD.zip
+MD/__MACOSX/
+
+# Backtest output
+equity_curve.csv
+
 
 ### C++ ###
 # Prerequisites

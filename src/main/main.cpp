@@ -1,23 +1,22 @@
 // main function for the hft-market-making app
 // please, keep it minimalistic
 
-#include "common/BasicTypes.hpp"
+#include "main/Backtester.hpp"
 
+#include <exception>
 #include <iostream>
 
 using namespace cmf;
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] const char* argv[])
+int main(int argc, const char* argv[])
 {
     try
     {
-        std::cout << "Hell! Oh, world!" << std::endl;
+        return runBacktest(parseArgs(argc, argv));
     }
     catch (std::exception& ex)
     {
         std::cerr << "HFT market-making app threw an exception: " << ex.what() << std::endl;
         return 1;
     }
-
-    return 0;
 }
