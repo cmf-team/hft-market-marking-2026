@@ -1,3 +1,13 @@
+Hi,
+My homework is available at https://github.com/mrk-andreev/cmf_backtest, and it was implemented on top of the original introductory assignment.
+
+Unfortunately, this repository (hft-market-making-2026) was introduced too late, and I do not have access to my laptop to make the required changes before the official deadline.
+
+I will only be able to complete the migration by the end of Monday.
+
+Thank you for your understanding.
+
+
 # CMF HFT Market-Making Backtester
 
 ## Directory structure
