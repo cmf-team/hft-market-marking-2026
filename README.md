@@ -75,12 +75,100 @@ or
 build/bin/test/hft-market-making-tests
 ```
 
-## Run
+## Data
 
-HFT market-making app:
+The backtester expects a directory containing two CSV files:
 
 ```
-build/bin/hft-market-making
+<data_dir>/
+├── trades.csv   # individual trade executions
+└── lob.csv      # limit order book snapshots (25 levels)
+```
+
+**trades.csv** columns:
+
+| Column | Type | Description |
+| --- | --- | --- |
+| *(index)* | int | row index (ignored) |
+| `local_timestamp` | uint64 | nanosecond/microsecond Unix timestamp |
+| `side` | string | `buy` or `sell` |
+| `price` | float | execution price |
+| `amount` | float | trade quantity |
+
+**lob.csv** columns:
+
+| Column | Type | Description |
+| --- | --- | --- |
+| *(index)* | int | row index (ignored) |
+| `local_timestamp` | uint64 | nanosecond/microsecond Unix timestamp |
+| `asks[i].price`, `asks[i].amount`, `bids[i].price`, `bids[i].amount` | float | price and size for levels 0–24 (interleaved per level) |
+
+Prices are stored as raw floats and scaled internally to `uint64_t × 1e9`.
+
+## Strategies
+
+### MicroPrice
+
+Econometric market-making using order book imbalance and spread state.
+
+Calibration phase (first N LOB snapshots) learns a Markov transition model
+over `(imbalance bucket, spread level)` states. After calibration the model
+produces an optimal mid-price adjustment and symmetric quotes around it.
+
+Key parameters (configurable in `main.cpp`):
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `calib_snapshots` | 5000 | warm-up LOB snapshots before quoting |
+| `n_imbal_buckets` | 10 | imbalance discretisation bins |
+| `n_spread_levels` | 5 | spread levels in ticks |
+| `order_qty` | 1.0 | order size |
+| `max_inventory` | 10.0 | halt quoting above this inventory |
+
+### Avellaneda-Stoikov
+
+Classic inventory-aware market-making model.
+
+Computes a reservation price penalised by current inventory and a
+closed-form optimal spread based on volatility, risk aversion, and order
+arrival intensity.
+
+Key parameters:
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `gamma` | 0.1 | risk aversion coefficient γ |
+| `k` | 1.5 | order arrival intensity |
+| `session_secs` | 600.0 | trading horizon T (seconds) |
+| `vol_window` | 100 | rolling window for σ estimation |
+| `max_inventory` | 10.0 | halt quoting above this inventory |
+
+## Run
+
+```bash
+build/bin/hft-market-making <data_dir> <strategy>
+```
+
+`strategy` is one of `microprice` or `avellaneda-stoikov`.
+
+Example:
+
+```bash
+build/bin/hft-market-making /path/to/data/MD microprice
+build/bin/hft-market-making /path/to/data/MD avellaneda-stoikov
+```
+
+Output:
+
+```
+Loaded events: <N>  first_ts=<timestamp>
+PnL:    <value>
+Sharpe: <value>
+Fills:  <count>
+Load trades:     <ms> ms
+Load orderbooks: <ms> ms
+Sort + merge:    <ms> ms
+Engine run:      <ms> ms
 ```
 
 ## Contributing
