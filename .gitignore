@@ -1,7 +1,12 @@
 .idea/
+.vs/
+out/
+__MACOSX/
 3rdparty/*
 build
 log
+lob.csv
+trades.csv
 .claude
 CLAUDE.md
 
