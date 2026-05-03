@@ -1,21 +1,23 @@
 // main function for the hft-market-making app
 // please, keep it minimalistic
 
-#include "common/BasicTypes.hpp"
+#include "Backtester.hpp"
 
+#include <exception>
 #include <iostream>
 
-using namespace cmf;
-
-int main([[maybe_unused]] int argc, [[maybe_unused]] const char* argv[])
+int main(int argc, const char* argv[])
 {
     try
     {
-        std::cout << "Hell! Oh, world!" << std::endl;
+        const cmf::BacktestConfig config = cmf::parseBacktestArgs(argc, argv);
+        const cmf::BacktestSummary summary = cmf::runBacktest(config);
+        std::cout << "Backtest finished. LOB rows=" << summary.lobRows << ", trade rows=" << summary.tradeRows
+                  << ", closed trades=" << summary.closedTrades << ", total pnl=" << summary.totalPnl << std::endl;
     }
-    catch (std::exception& ex)
+    catch (const std::exception& ex)
     {
-        std::cerr << "HFT market-making app threw an exception: " << ex.what() << std::endl;
+        std::cerr << "HFT market-making backtester threw an exception: " << ex.what() << std::endl;
         return 1;
     }
 
