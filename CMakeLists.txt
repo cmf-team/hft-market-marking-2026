@@ -5,8 +5,11 @@ project(hft-market-making VERSION 0.0.1 DESCRIPTION "CMF HFT market-making backt
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
 include(cmake/GlobalSettings.cmake)
-include(cmake/ThirdPartyLibs.cmake)
 include(cmake/GenerateVersionFile.cmake)
+
+if(BUILD_TESTS)
+    include(cmake/ThirdPartyLibs.cmake)
+endif()
 
 add_subdirectory(src)
 add_subdirectory(config)
