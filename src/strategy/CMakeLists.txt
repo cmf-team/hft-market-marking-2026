@@ -1,0 +1,5 @@
+file(GLOB SRC CONFIGURE_DEPENDS *.cpp)
+set(TARGET hft-market-making-strategy)
+add_library(${TARGET} STATIC ${SRC})
+target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(${TARGET} PUBLIC hft-market-making-common)

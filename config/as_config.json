@@ -1,0 +1,9 @@
+{
+    "strategy": "AvellanedaStoikov",
+    "gamma":       0.01,
+    "kappa":       1.5,
+    "T":           1.0,
+    "q_max":       10000000.0,
+    "order_size":  50000.0,
+    "vol_window":  50
+}
