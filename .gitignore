@@ -4,6 +4,14 @@ build
 log
 .claude
 CLAUDE.md
+.DS_Store
+
+# Backtest run artefacts -- генерируются на лету, не должны попадать в репо.
+reports/
+
+# Большие исторические данные курса -- лежат локально, не в git.
+MD/
+*.feather
 
 
 ### C++ ###
