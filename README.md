@@ -1,5 +1,7 @@
 # CMF HFT Market-Making Backtester
 
+Backtesting engine is implemented in the following repo: https://github.com/niksche/backtesting-engine-hft
+
 ## Directory structure
 
 ```
