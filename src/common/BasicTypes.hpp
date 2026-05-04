@@ -99,4 +99,34 @@ struct MktSecId
     static constexpr MarketSecurityId None = {0, 0};
 };
 
+enum class EventType
+{
+    Quote,
+    Trade
+};
+
+struct MarketEvent
+{
+    NanoTime ts_recv;
+    EventType type;
+
+    Price best_ask_price = 0;
+    Quantity best_ask_size = 0;
+    Price best_bid_price = 0;
+    Quantity best_bid_size = 0;
+
+    Price trade_price = 0;
+    Quantity trade_size = 0;
+    Side trade_side = Side::None;
+
+    bool operator<(const MarketEvent& other) const
+    {
+        if (ts_recv == other.ts_recv)
+        {
+            return type == EventType::Quote && other.type == EventType::Trade;
+        }
+        return ts_recv < other.ts_recv;
+    }
+};
+
 } // namespace cmf
