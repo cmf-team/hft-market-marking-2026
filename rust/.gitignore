@@ -1,0 +1,7 @@
+/target
+/out
+/data
+Cargo.lock
+*.swp
+.idea/
+.vscode/
