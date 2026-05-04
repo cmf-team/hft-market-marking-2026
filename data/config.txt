@@ -1,0 +1,71 @@
+# Backtester config — key=value, '#' starts a comment.
+# Any of these can be overridden on the CLI (e.g. --submit-us 250).
+
+# ----- Input / output paths -----
+# Relative paths are resolved against the process working directory.
+# Inside the Docker container that's /workspace, so e.g. data/lob.csv
+# refers to /workspace/data/lob.csv.
+lob    = data/lob.csv
+trades = data/trades.csv
+out    = out
+
+# ----- Instrument spec -----
+# tick_size: smallest price increment in human units. The user's sample data
+#            uses 1e-7 (so a Price of 110435 ticks = 0.0110435).
+# qty_scale: multiplier applied to a CSV amount to get internal integer Qty.
+#            1.0 for whole-integer amounts.
+tick_size = 1e-7
+qty_scale = 1
+
+# ----- Latency model (FixedLatencyModel, microseconds) -----
+# submit_us: strategy → matcher delay for new orders
+# cancel_us: strategy → matcher delay for cancels
+# fill_us:   matcher → strategy round-trip for acks / fills / rejects
+submit_us = 100
+cancel_us = 100
+fill_us   = 100
+
+# ----- Reporting -----
+# sample_us: equity-curve sample interval in microseconds. Drawdown is
+#            updated on every book event regardless; this knob only thins
+#            the equity_ samples written to equity.csv. 1_000_000 = 1 sample
+#            per second of market time. Set to 0 to record every book event
+#            (very large CSV on long runs).
+sample_us = 1000000
+
+# ----- Strategy selection -----
+# strategy: "static" (one-tick-off-touch quoter), "as" (Avellaneda-Stoikov),
+#           or "micro" (Stoikov micro-price weighted-mid quoter).
+# quote_size: passive quote size posted on each side, in internal Qty units.
+strategy   = as
+quote_size = 1
+
+# ----- Avellaneda-Stoikov parameters (used when strategy = as) -----
+# gamma:      risk-aversion. Higher = wider spread + stronger inventory skew.
+# k:          order-arrival intensity. Higher = tighter spread (more competition).
+# sigma_init: seed for the EWMA volatility estimator (in ticks per book step).
+# vol_alpha:  EWMA smoothing coefficient for sigma^2; 0 freezes sigma at sigma_init.
+# horizon_us: total session length used to compute (T - t)/T. Default = 1 day.
+gamma      = 0.5
+k          = 1.5
+sigma_init = 1.0
+vol_alpha  = 0.05
+horizon_us = 432000000000
+
+# ----- Micro-price parameters (used when strategy = micro) -----
+# mp_half_spread:     ticks from M* to each quote (passive distance).
+# mp_inventory_skew:  ticks per inventory unit. Shifts both quotes against
+#                     the position so the strategy leans toward flat. With
+#                     skew = 0 the strategy has no inventory control and
+#                     can drift directionally without bound.
+# mp_imbalance_depth: levels per side averaged into M* via per-side VWAP.
+#                     1 reproduces the paper's level-1 micro-price exactly;
+#                     higher values smooth flicker on thin top-of-book.
+# mp_passive_only:    1 = clamp quotes to the same-side touch (never inside
+#                         the spread); the strict market-making posture.
+#                     0 = allow quotes inside the spread (more fills, more
+#                         adverse selection).
+mp_half_spread     = 10
+mp_inventory_skew  = 0.5
+mp_imbalance_depth = 10
+mp_passive_only    = 1

@@ -1,0 +1,7 @@
+.git
+.idea
+.vscode
+build
+cmake-build-*
+.DS_Store
+PLAN.md
