@@ -19,6 +19,12 @@ add_executable(${TARGET} ${TEST_SRC})
 # Link against the necessary libraries
 target_link_libraries(${TARGET} PRIVATE
     Catch2-static-lib
+    hft-market-making-analytics
+    hft-market-making-export
+    hft-market-making-engine
+    hft-market-making-strategies
+    hft-market-making-order-book
+    hft-market-making-parser
     hft-market-making-common
 )
 
