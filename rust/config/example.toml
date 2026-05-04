@@ -1,0 +1,22 @@
+[data]
+lob_csv = "lob.csv"
+trades_csv = "trades.csv"
+
+[engine]
+tick_ms = 100
+allow_partial_fills = true
+
+[strategy]
+kind = "avellaneda_stoikov"
+[strategy.avellaneda_stoikov]
+sigma = 0.001
+k = 1.5
+a = 1.0
+gamma = 0.1
+quote_qty = 1
+max_abs_inventory = 100
+
+[output]
+dir = "out"
+equity_curve = true
+fills = true
