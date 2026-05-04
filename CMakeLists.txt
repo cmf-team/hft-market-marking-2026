@@ -1,21 +1,17 @@
-cmake_minimum_required(VERSION 3.22)
-project(backtester CXX)
+cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+project(hft-market-making VERSION 0.0.1 DESCRIPTION "CMF HFT market-making backtester" LANGUAGES CXX C)
 
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
-endif()
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
-add_compile_options(-Wall -Wextra -Wpedantic -Wconversion -Wshadow)
-
-include(CTest)
-enable_testing()
+include(cmake/GlobalSettings.cmake)
+include(cmake/ThirdPartyLibs.cmake)
+include(cmake/GenerateVersionFile.cmake)
 
 add_subdirectory(src)
+add_subdirectory(config)
 
-if(BUILD_TESTING)
-    add_subdirectory(tests)
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(test)
 endif()

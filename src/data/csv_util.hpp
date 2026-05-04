@@ -3,8 +3,10 @@
 // Internal CSV parsing helpers shared by the loaders. Not part of the public
 // API; do not include from headers under include/bt/.
 
+#include <cerrno>
 #include <charconv>
 #include <cstdint>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -60,11 +62,20 @@ inline double parse_double(std::string_view sv,
                            const std::string& path,
                            std::size_t row,
                            std::string_view field_name) {
-    double v = 0.0;
-    const auto first = sv.data();
-    const auto last  = sv.data() + sv.size();
-    const auto [ptr, ec] = std::from_chars(first, last, v);
-    if (ec != std::errc{} || ptr != last) {
+    // We can't use std::from_chars for double here: macOS libc++ ships only
+    // the integer overloads and explicitly deletes the bool one (which
+    // ambiguously wins on a `double&` argument), so the call fails to
+    // compile on Apple's stdlib. strtod is on every C++ stdlib, has the
+    // exact error-reporting semantics we need, and the per-row cost is
+    // negligible for a CSV loader that's already I/O bound.
+    std::string buf(sv);
+    const char* cstr = buf.c_str();
+    char*       end_ptr = nullptr;
+    errno = 0;
+    const double v = std::strtod(cstr, &end_ptr);
+    const bool consumed_all = (end_ptr != cstr) &&
+        (static_cast<std::size_t>(end_ptr - cstr) == buf.size());
+    if (!consumed_all || errno == ERANGE) {
         throw_parse_error(path, row,
                           "bad " + std::string(field_name) + " '" + std::string(sv) + "'");
     }

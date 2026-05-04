@@ -1,3 +1,5 @@
+add_subdirectory(common)
+add_subdirectory(main)
 add_library(bt_core STATIC
     data/csv_trade_loader.cpp
     data/csv_lob_loader.cpp
