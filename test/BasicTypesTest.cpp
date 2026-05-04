@@ -4,11 +4,9 @@
 
 #include "catch2/catch_all.hpp"
 
-using namespace cmf;
-
 TEST_CASE("BasicTypes - Side", "[BasicTypes]")
 {
-    REQUIRE(int(Side::Buy) == 1);
-    REQUIRE(int(Side::Sell) == -1);
-    REQUIRE(int(Side::None) == 0);
+    REQUIRE(int(cmf::Side::Buy) == 1);
+    REQUIRE(int(cmf::Side::Sell) == -1);
+    REQUIRE(int(cmf::Side::None) == 0);
 }

@@ -5,6 +5,7 @@
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules)
 
 option(BUILD_TESTS "Build tests" ON)
+option(BUILD_BENCHMARKS "Build benchmarks" ON)
 
 # Choose build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -29,7 +30,7 @@ macro(print_message)
 endmacro()
 
 print_message("----------------------------------------")
-print_message("Options:            BUILD_TESTS=${BUILD_TESTS}")
+print_message("Options:            BUILD_TESTS=${BUILD_TESTS}  BUILD_BENCHMARKS=${BUILD_BENCHMARKS}")
 print_message("Build type:         ${CMAKE_BUILD_TYPE}")
 print_message("Build host:         ${BUILD_NODE}")
 print_message("Processor count:    ${PROCESSOR_COUNT}")
@@ -56,6 +57,13 @@ add_compile_options($<$<CONFIG:Release>:-O3> $<$<CONFIG:Release>:-DNDEBUG>)
 # Warnings
 add_compile_options(-Werror -Wall -Wextra)
 #add_compile_options(-Wfatal-errors -ftemplate-backtrace-limit=0)
+
+# Apple arm64 native CPU optimization
+if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+    add_compile_options($<$<CONFIG:Release>:-mcpu=native>
+                        $<$<CONFIG:Release>:-fno-math-errno>
+                        $<$<CONFIG:Release>:-fno-trapping-math>)
+endif()
 
 # Include dir
 include_directories(src)

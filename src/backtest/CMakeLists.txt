@@ -1,0 +1,6 @@
+add_subdirectory(order_book)
+add_subdirectory(parser)
+add_subdirectory(strategies)
+add_subdirectory(engine)
+add_subdirectory(analytics)
+add_subdirectory(export)
